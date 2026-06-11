@@ -4,8 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "CHOKIDAR_USEPOLLING=true vite",
-    "dev:watch": "CHOKIDAR_USEPOLLING=true vite build --watch",
+    "dev": "cross-env CHOKIDAR_USEPOLLING=true vite",
+    "dev:watch": "cross-env CHOKIDAR_USEPOLLING=true vite build --watch",
     "build": "vue-tsc -b && vite build",
     "preview": "vite preview"
   },
@@ -20,6 +20,7 @@
     "@types/node": "^24.12.3",
     "@vitejs/plugin-vue": "^6.0.6",
     "@vue/tsconfig": "^0.9.1",
+    "cross-env": "^10.1.0",
     "typescript": "~6.0.2",
     "vite": "^8.0.12",
     "vue-tsc": "^3.2.8"

@@ -94,11 +94,11 @@ export function crxPopupHmr(): Plugin {
     },
     configResolved(config) {
       // 必须在 Vite 注入 createHotContext 之后再打补丁
-      config.plugins.push({
+      (config.plugins as any[]).push({
         name: 'redcopy:crx-hot-patch-late',
         apply: 'serve',
         enforce: 'post',
-        transform(code) {
+        transform(code: string) {
           const patched = patchHotContextPaths(code)
           if (patched === code) return null
           return { code: patched, map: null }
