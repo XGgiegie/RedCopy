@@ -86,13 +86,11 @@ QQ：1653444718
 
 ## 隐私权政策
 
-商店必填「隐私权政策」URL。可将项目中的 `PRIVACY.md` 发布到：
+商店必填「隐私权政策」URL，直接填入：
 
-- GitHub Pages
-- Gitee Pages
-- Notion 公开页
-
-将公开链接填入商店对应字段。
+```
+https://github.com/XGgiegie/RedCopy/blob/main/PRIVACY.md
+```
 
 **隐私权表单逐项怎么填？** 见 [隐私权填报指南.md](./隐私权填报指南.md)（含单一用途、数据类型、权限说明、审核回复模板，可直接复制）。
 
