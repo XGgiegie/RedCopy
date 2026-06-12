@@ -36,6 +36,10 @@ Thumbs.db
 # 测试覆盖率
 coverage/
 
+# 扩展打包产物（npm run package 生成，勿提交）
+*.zip
+薯薯小抄-*.zip
+
 # 扩展打包密钥（切勿提交）
 *.pem
 *.crx

@@ -7,6 +7,8 @@
     "dev": "cross-env CHOKIDAR_USEPOLLING=true vite",
     "dev:watch": "cross-env CHOKIDAR_USEPOLLING=true vite build --watch",
     "build": "vue-tsc -b && vite build",
+    "icons": "node scripts/generate-icons.mjs",
+    "package": "npm run icons && npm run build && node scripts/package-extension.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -21,7 +23,9 @@
     "@types/node": "^24.12.3",
     "@vitejs/plugin-vue": "^6.0.6",
     "@vue/tsconfig": "^0.9.1",
+    "canvas": "^3.2.3",
     "cross-env": "^10.1.0",
+    "sharp": "^0.35.1",
     "typescript": "~6.0.2",
     "vite": "^8.0.12",
     "vue-tsc": "^3.2.8"

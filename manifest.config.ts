@@ -38,8 +38,6 @@ export default defineManifest({
   host_permissions: [
     '*://*.xiaohongshu.com/*',
     '*://*.xhscdn.com/*',
-    'http://localhost:5173/*',
-    'http://127.0.0.1:5173/*',
     'https://api.deepseek.com/*',
   ],
 })
