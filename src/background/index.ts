@@ -2,9 +2,11 @@ import { injectExtractNote } from '../shared/extract-note'
 import {
   EXTRACT_NOTE_MESSAGE,
   STORAGE_GET_MESSAGE,
+  STORAGE_REMOVE_MESSAGE,
   STORAGE_SET_MESSAGE,
   type ExtractNoteResponse,
   type StorageGetResponse,
+  type StorageRemoveResponse,
   type StorageSetResponse,
 } from '../shared/messages'
 
@@ -46,6 +48,20 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         const msg = error instanceof Error ? error.message : String(error)
         console.error('[RedCopy] 代理写入存储失败', msg, error)
         sendResponse({ ok: false, error: msg } satisfies StorageSetResponse)
+      })
+    return true
+  }
+
+  if (message?.type === STORAGE_REMOVE_MESSAGE) {
+    chrome.storage.local
+      .remove(message.key)
+      .then(() => {
+        sendResponse({ ok: true } satisfies StorageRemoveResponse)
+      })
+      .catch((error: unknown) => {
+        const msg = error instanceof Error ? error.message : String(error)
+        console.error('[RedCopy] 代理删除存储失败', msg, error)
+        sendResponse({ ok: false, error: msg } satisfies StorageRemoveResponse)
       })
     return true
   }

@@ -5,6 +5,7 @@ export const EXTRACT_NOTE_MESSAGE = 'redcopy:extract-note' as const
 export const ANALYZE_NOTE_MESSAGE = 'redcopy:analyze-note' as const
 export const STORAGE_GET_MESSAGE = 'redcopy:storage-get' as const
 export const STORAGE_SET_MESSAGE = 'redcopy:storage-set' as const
+export const STORAGE_REMOVE_MESSAGE = 'redcopy:storage-remove' as const
 
 export interface ExtractNoteRequest {
   type: typeof EXTRACT_NOTE_MESSAGE
@@ -50,6 +51,16 @@ export interface StorageSetRequest {
 }
 
 export interface StorageSetResponse {
+  ok: boolean
+  error?: string
+}
+
+export interface StorageRemoveRequest {
+  type: typeof STORAGE_REMOVE_MESSAGE
+  key: string
+}
+
+export interface StorageRemoveResponse {
   ok: boolean
   error?: string
 }

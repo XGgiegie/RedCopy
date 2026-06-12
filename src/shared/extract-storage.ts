@@ -1,4 +1,4 @@
-import type { NoteTextInfo } from './note-types'
+import type { NoteMediaType, NoteTextInfo } from './note-types'
 import { storageGet, storageSet } from './storage'
 
 const STORAGE_KEY = 'redcopy:lastExtract'
@@ -7,6 +7,7 @@ export interface SavedExtractRecord {
   noteId: string | null
   url: string
   note: NoteTextInfo
+  noteType?: NoteMediaType
 }
 
 export async function loadLastExtract(): Promise<SavedExtractRecord | null> {

@@ -1,7 +1,9 @@
 import {
   STORAGE_GET_MESSAGE,
+  STORAGE_REMOVE_MESSAGE,
   STORAGE_SET_MESSAGE,
   type StorageGetResponse,
+  type StorageRemoveResponse,
   type StorageSetResponse,
 } from './messages'
 
@@ -84,5 +86,26 @@ export async function storageSet(key: string, value: unknown): Promise<void> {
 
   if (!response.ok) {
     throw new Error(response.error ?? '写入存储失败')
+  }
+}
+
+/** 删除本地存储项；无法直接访问时通过 background 代理 */
+export async function storageRemove(key: string): Promise<void> {
+  if (hasDirectStorage()) {
+    await chrome.storage.local.remove(key)
+    return
+  }
+
+  console.info('[RedCopy] chrome.storage 不可用，改用 background 代理删除', {
+    key,
+  })
+
+  const response = await sendStorageMessage<StorageRemoveResponse>({
+    type: STORAGE_REMOVE_MESSAGE,
+    key,
+  })
+
+  if (!response.ok) {
+    throw new Error(response.error ?? '删除存储失败')
   }
 }

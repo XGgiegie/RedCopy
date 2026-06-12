@@ -39,7 +39,7 @@ export interface NoteExtractResult {
   url: string
   noteId: string | null
   isNotePage: boolean
-  /** normal=图文，video=视频（暂不支持分析） */
+  /** normal=图文，video=视频（仅提取文案，不做视频解析） */
   noteType: NoteMediaType
   source: 'initial_state' | 'dom' | 'mixed' | 'none'
   text: NoteTextInfo

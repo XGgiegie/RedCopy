@@ -2,33 +2,109 @@
 import {
   NButton,
   NCard,
+  NDynamicTags,
+  NInput,
   NModal,
+  NRadioButton,
+  NRadioGroup,
   NSpace,
   NTag,
   NText,
   useMessage,
 } from 'naive-ui'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import type { AiAnalysisResult } from '../shared/ai-types'
-import { loadLastAnalysis, saveLastAnalysis } from '../shared/analysis-storage'
+import type { AiAnalysisResult, GeneratedNoteDraft } from '../shared/ai-types'
+import {
+  clearLastAnalysis,
+  loadLastAnalysis,
+  saveLastAnalysis,
+} from '../shared/analysis-storage'
 import { isAiSettingsReady, loadAiSettings } from '../shared/ai-settings'
+import {
+  clearLastDraft,
+  loadLastDraft,
+  saveLastDraft,
+} from '../shared/draft-storage'
+import {
+  copyTextToClipboard,
+  formatAnalysisAsMarkdown,
+  formatAnalysisAsPlainText,
+  formatDraftAsMarkdown,
+  formatDraftAsPlainText,
+  formatNoteAsMarkdown,
+} from '../shared/export-markdown'
+import {
+  API_KEY_SETUP_HINT,
+  APP_NAME,
+  APP_TAGLINE,
+  CONTACT_GROUP,
+  CONTACT_QQ,
+} from '../shared/brand'
 import { loadLastExtract, saveLastExtract } from '../shared/extract-storage'
-import type { NoteExtractResult, NoteTextInfo } from '../shared/note-types'
+import {
+  downloadAllNoteImages,
+  downloadNoteImage,
+  formatImagesAsMarkdown,
+  getNoteBodyText,
+} from '../shared/note-media'
+import type {
+  NoteExtractResult,
+  NoteMediaType,
+  NoteTextInfo,
+} from '../shared/note-types'
 import { analyzeNoteText } from './analyze-note'
 import { extractNoteFromTab } from './extract-note'
+import { generateNoteDraft } from './generate-note'
 import SettingsPanel from './SettingsPanel.vue'
 import { useNotePageWatch } from './use-note-page-watch'
 
 const message = useMessage()
+let persistDraftTimer: ReturnType<typeof setTimeout> | null = null
 const isXhsPage = ref(false)
 const isNotePage = ref(false)
 const isExtracting = ref(false)
 const isAnalyzing = ref(false)
+const isGenerating = ref(false)
+const isDownloadingAllImages = ref(false)
+const downloadingImageIndex = ref<number | null>(null)
 const isAiConfigured = ref(false)
 const showAiSettings = ref(false)
 const notePreview = ref<NoteTextInfo | null>(null)
 const analysisResult = ref<AiAnalysisResult | null>(null)
+const generatedDraft = ref<GeneratedNoteDraft | null>(null)
 const lastExtractMeta = ref<{ noteId: string | null; url: string } | null>(null)
+const extractedNoteType = ref<NoteMediaType>('normal')
+const generateTopic = ref('')
+
+type ContentView = 'note' | 'analysis' | 'draft'
+const contentView = ref<ContentView>('note')
+
+const contentViewOptions = computed(() => {
+  const options: { label: string; value: ContentView }[] = []
+  if (notePreview.value) options.push({ label: '笔记', value: 'note' })
+  if (analysisResult.value) options.push({ label: 'AI 分析', value: 'analysis' })
+  if (generatedDraft.value) options.push({ label: '类似笔记', value: 'draft' })
+  return options
+})
+
+const canSwitchView = computed(() => contentViewOptions.value.length >= 2)
+
+function isActiveContentView(view: ContentView): boolean {
+  if (!canSwitchView.value) return true
+  return contentView.value === view
+}
+
+const showNoteSection = computed(
+  () => !!notePreview.value && isActiveContentView('note'),
+)
+
+const showAnalysisSection = computed(
+  () => !!analysisResult.value && isActiveContentView('analysis'),
+)
+
+const showDraftSection = computed(
+  () => !!generatedDraft.value && isActiveContentView('draft'),
+)
 
 const extractedImages = computed(() => notePreview.value?.images ?? [])
 
@@ -51,6 +127,7 @@ async function restoreLastExtract() {
 
   notePreview.value = saved.note
   lastExtractMeta.value = { noteId: saved.noteId, url: saved.url }
+  extractedNoteType.value = saved.noteType ?? 'normal'
   console.info('[RedCopy] 已恢复上次提取', { noteId: saved.noteId })
 }
 
@@ -60,6 +137,22 @@ async function restoreLastAnalysis() {
 
   analysisResult.value = saved.analysis
   console.info('[RedCopy] 已恢复上次分析', { noteId: saved.noteId })
+}
+
+function normalizeDraft(draft: GeneratedNoteDraft): GeneratedNoteDraft {
+  return {
+    ...draft,
+    tags: draft.tags ?? [],
+    imageTips: draft.imageTips ?? '',
+  }
+}
+
+async function restoreLastDraft() {
+  const saved = await loadLastDraft()
+  if (!saved) return
+
+  generatedDraft.value = normalizeDraft(saved.draft)
+  console.info('[RedCopy] 已恢复上次类似笔记', { noteId: saved.noteId })
 }
 
 function openSettingsPanel() {
@@ -77,7 +170,7 @@ async function handleExtract() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
 
   if (!tab?.id || !isNotePage.value) {
-    message.warning('请先打开小红书图文笔记详情页')
+    message.warning('请先打开小红书笔记详情页')
     return
   }
 
@@ -106,7 +199,25 @@ async function handleExtract() {
   // 提取成功：先展示并提示，保存失败不影响该结果
   notePreview.value = extract.text
   lastExtractMeta.value = { noteId: extract.noteId, url: extract.url }
-  message.success('笔记内容已提取')
+  extractedNoteType.value = extract.noteType
+
+  // 重新提取后清空旧 AI 结果，避免与新笔记内容错位
+  analysisResult.value = null
+  generatedDraft.value = null
+  contentView.value = 'note'
+  try {
+    await Promise.all([clearLastAnalysis(), clearLastDraft()])
+    console.info('[RedCopy] 已清空上次 AI 结果', { noteId: extract.noteId })
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    console.warn('[RedCopy] 清空 AI 缓存失败', detail, error)
+  }
+
+  message.success(
+    extract.noteType === 'video'
+      ? '已提取视频笔记文案（可进行文本分析与生成）'
+      : '笔记内容已提取',
+  )
   console.info('[RedCopy] 提取成功', {
     noteId: extract.noteId,
     images: extract.text.images?.length ?? 0,
@@ -119,6 +230,7 @@ async function handleExtract() {
       noteId: extract.noteId,
       url: extract.url,
       note: extract.text,
+      noteType: extract.noteType,
     })
     console.info('[RedCopy] 提取结果已保存', { noteId: extract.noteId })
   } catch (error) {
@@ -127,6 +239,246 @@ async function handleExtract() {
     message.warning('提取成功，但本地保存失败')
   } finally {
     isExtracting.value = false
+  }
+}
+
+function getImageDownloadContext() {
+  return {
+    title: notePreview.value?.title,
+    noteId: lastExtractMeta.value?.noteId,
+  }
+}
+
+async function handleCopyNoteBody() {
+  if (!notePreview.value) return
+
+  try {
+    const text = getNoteBodyText(notePreview.value)
+    await copyTextToClipboard(text)
+    message.success('正文已复制')
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    console.error('[RedCopy] 复制正文失败', detail, error)
+    message.error('复制失败')
+  }
+}
+
+async function handleCopyNoteImages() {
+  if (!notePreview.value?.images.length) {
+    message.warning('当前笔记没有图片')
+    return
+  }
+
+  try {
+    const markdown = formatImagesAsMarkdown(notePreview.value.images)
+    await copyTextToClipboard(markdown)
+    message.success('图片 Markdown 已复制')
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    console.error('[RedCopy] 复制图片失败', detail, error)
+    message.error('复制失败')
+  }
+}
+
+async function handleDownloadAllImages() {
+  if (!notePreview.value?.images.length) {
+    message.warning('当前笔记没有图片')
+    return
+  }
+
+  isDownloadingAllImages.value = true
+  try {
+    const result = await downloadAllNoteImages(
+      notePreview.value.images,
+      getImageDownloadContext(),
+    )
+    if (result.failed === 0) {
+      message.success(`已开始下载 ${result.success} 张图片`)
+    } else {
+      message.warning(`下载完成：成功 ${result.success} 张，失败 ${result.failed} 张`)
+    }
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    console.error('[RedCopy] 批量下载图片失败', detail, error)
+    message.error(`下载失败：${detail}`)
+  } finally {
+    isDownloadingAllImages.value = false
+  }
+}
+
+async function handleDownloadImage(index: number) {
+  const images = notePreview.value?.images
+  const url = images?.[index]
+  if (!url) return
+
+  downloadingImageIndex.value = index
+  try {
+    await downloadNoteImage(url, index, getImageDownloadContext())
+    message.success(`图片 ${index + 1} 已开始下载`)
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    console.error('[RedCopy] 单张图片下载失败', { index, detail }, error)
+    message.error(`下载失败：${detail}`)
+  } finally {
+    downloadingImageIndex.value = null
+  }
+}
+
+async function handleCopyNoteMarkdown() {
+  if (!notePreview.value) return
+
+  try {
+    const markdown = formatNoteAsMarkdown(notePreview.value, {
+      url: lastExtractMeta.value?.url,
+      noteId: lastExtractMeta.value?.noteId,
+    })
+    await copyTextToClipboard(markdown)
+    message.success('笔记 Markdown 已复制')
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    console.error('[RedCopy] 复制笔记 Markdown 失败', detail, error)
+    message.error('复制失败')
+  }
+}
+
+async function handleCopyAnalysisText() {
+  if (!analysisResult.value) return
+
+  try {
+    const text = formatAnalysisAsPlainText(analysisResult.value)
+    await copyTextToClipboard(text)
+    message.success('AI 分析已复制')
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    console.error('[RedCopy] 复制 AI 分析失败', detail, error)
+    message.error('复制失败')
+  }
+}
+
+async function handleCopyAnalysisMarkdown() {
+  if (!analysisResult.value) return
+
+  try {
+    const markdown = formatAnalysisAsMarkdown(analysisResult.value)
+    await copyTextToClipboard(markdown)
+    message.success('AI 分析 Markdown 已复制')
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    console.error('[RedCopy] 复制分析 Markdown 失败', detail, error)
+    message.error('复制失败')
+  }
+}
+
+function schedulePersistDraft() {
+  if (!generatedDraft.value || !lastExtractMeta.value || !notePreview.value) {
+    return
+  }
+
+  if (persistDraftTimer) clearTimeout(persistDraftTimer)
+  persistDraftTimer = setTimeout(() => {
+    void persistDraftEdits()
+  }, 600)
+}
+
+async function persistDraftEdits() {
+  if (!generatedDraft.value || !lastExtractMeta.value || !notePreview.value) {
+    return
+  }
+
+  try {
+    await saveLastDraft({
+      noteId: lastExtractMeta.value.noteId,
+      url: lastExtractMeta.value.url,
+      generatedAt: Date.now(),
+      note: notePreview.value,
+      draft: generatedDraft.value,
+    })
+    console.info('[RedCopy] 类似笔记编辑已保存')
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    console.error('[RedCopy] 保存类似笔记编辑失败', detail, error)
+  }
+}
+
+async function handleCopyDraftText() {
+  if (!generatedDraft.value) return
+
+  try {
+    const text = formatDraftAsPlainText(generatedDraft.value)
+    await copyTextToClipboard(text)
+    message.success('类似笔记已复制')
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    console.error('[RedCopy] 复制生成稿失败', detail, error)
+    message.error('复制失败')
+  }
+}
+
+async function handleCopyDraftMarkdown() {
+  if (!generatedDraft.value) return
+
+  try {
+    const markdown = formatDraftAsMarkdown(generatedDraft.value)
+    await copyTextToClipboard(markdown)
+    message.success('类似笔记 Markdown 已复制')
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    console.error('[RedCopy] 复制生成稿 Markdown 失败', detail, error)
+    message.error('复制失败')
+  }
+}
+
+async function handleOneClickGenerate() {
+  if (!notePreview.value) {
+    message.warning('请先执行提取，再生成类似笔记')
+    return
+  }
+
+  if (!analysisResult.value) {
+    message.warning('请先进行 AI 分析，再生成类似笔记')
+    return
+  }
+
+  if (!lastExtractMeta.value) {
+    message.warning('缺少笔记元数据，请重新提取后再生成')
+    return
+  }
+
+  isGenerating.value = true
+
+  try {
+    const draft = await generateNoteDraft({
+      noteId: lastExtractMeta.value.noteId,
+      url: lastExtractMeta.value.url,
+      text: notePreview.value,
+      analysis: analysisResult.value,
+      topic: generateTopic.value,
+    })
+
+    generatedDraft.value = normalizeDraft(draft)
+    contentView.value = 'draft'
+
+    try {
+      await saveLastDraft({
+        noteId: lastExtractMeta.value.noteId,
+        url: lastExtractMeta.value.url,
+        generatedAt: Date.now(),
+        note: notePreview.value,
+        draft: generatedDraft.value,
+      })
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      console.error('[RedCopy] 保存类似笔记失败', detail, error)
+      message.warning('生成成功，但本地保存失败')
+    }
+
+    message.success('类似笔记已生成，可直接编辑')
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    console.error('[RedCopy] 生成类似笔记失败', detail, error)
+    message.error(`生成失败：${detail}`)
+  } finally {
+    isGenerating.value = false
   }
 }
 
@@ -151,6 +503,7 @@ async function handleAiAnalyze() {
     })
 
     analysisResult.value = analysis
+    contentView.value = 'analysis'
 
     try {
       await saveLastAnalysis({
@@ -190,12 +543,14 @@ onMounted(() => {
   void Promise.all([
     restoreLastExtract(),
     restoreLastAnalysis(),
+    restoreLastDraft(),
     refreshAiSettings(),
   ])
 })
 
 onUnmounted(() => {
   chrome.storage?.onChanged?.removeListener(handleStorageChanged)
+  if (persistDraftTimer) clearTimeout(persistDraftTimer)
 })
 </script>
 
@@ -204,7 +559,7 @@ onUnmounted(() => {
     <NModal
       v-model:show="showAiSettings"
       preset="card"
-      title="更换 API Key"
+      title="配置 API Key"
       :bordered="false"
       size="small"
       style="width: 92%; max-width: 360px;"
@@ -217,7 +572,7 @@ onUnmounted(() => {
     </NModal>
 
     <NCard
-      title="小红书爆款解析助手"
+      :title="APP_NAME"
       size="small"
       :bordered="false"
       class="panel-card"
@@ -227,7 +582,7 @@ onUnmounted(() => {
           quaternary
           circle
           size="small"
-          title="更换 API Key"
+          title="配置 API Key"
           class="settings-gear-btn"
           @click="openSettingsPanel"
         >
@@ -238,10 +593,38 @@ onUnmounted(() => {
       </template>
 
       <NSpace vertical :size="12">
+        <NText depth="3" class="app-tagline">{{ APP_TAGLINE }}</NText>
+
+        <div
+          v-if="!isAiConfigured"
+          class="api-key-hint"
+          role="button"
+          tabindex="0"
+          @click="openSettingsPanel"
+          @keydown.enter="openSettingsPanel"
+        >
+          <NText class="api-key-hint-title">🍠 请先配置 DeepSeek API Key</NText>
+          <NText depth="3" class="api-key-hint-text">
+            {{ API_KEY_SETUP_HINT }}
+            <NButton
+              text
+              tag="a"
+              type="primary"
+              size="tiny"
+              href="https://platform.deepseek.com/api_keys"
+              target="_blank"
+              rel="noreferrer"
+              @click.stop
+            >
+              去申请
+            </NButton>
+          </NText>
+        </div>
+
         <NSpace align="center" justify="space-between">
           <NText depth="3" style="font-size: 12px;">提取与分析图文笔记</NText>
           <NSpace :size="6">
-            <NTag type="info" size="small" round :bordered="false">仅图文</NTag>
+            <NTag type="info" size="small" round :bordered="false">图文+视频文案</NTag>
             <NTag :type="isNotePage ? 'success' : isXhsPage ? 'warning' : 'default'" size="small" round>
               {{ isNotePage ? '已就绪' : isXhsPage ? '非笔记页' : '未命中' }}
             </NTag>
@@ -249,7 +632,7 @@ onUnmounted(() => {
         </NSpace>
 
         <NText depth="3" class="support-hint">
-          暂不支持视频笔记，请打开图文笔记详情页后操作。
+          视频笔记可提取标题/正文等文案用于分析与生成；图片下载仅适用于图文笔记。
         </NText>
 
         <NSpace vertical :size="8">
@@ -267,7 +650,7 @@ onUnmounted(() => {
             block
             secondary
             :loading="isAnalyzing"
-            :disabled="!isAiConfigured || !notePreview"
+            :disabled="!isAiConfigured || !notePreview || isGenerating"
             :title="!isAiConfigured ? '请先点击右上角齿轮配置 API Key' : ''"
             @click="handleAiAnalyze"
           >
@@ -275,26 +658,104 @@ onUnmounted(() => {
           </NButton>
         </NSpace>
 
-        <div v-if="notePreview" class="note-preview-card">
-          <NSpace align="center" class="preview-meta">
-            <NTag type="primary" size="small" round :bordered="false">
-              👤 {{ notePreview.author || '未知作者' }}
-            </NTag>
+        <div v-if="analysisResult" class="generate-block">
+          <NInput
+            v-model:value="generateTopic"
+            type="textarea"
+            placeholder="想卖什么 / 主题或卖点（选填，留空也能生成）"
+            :autosize="{ minRows: 1, maxRows: 4 }"
+          />
+          <NButton
+            block
+            class="one-click-generate-btn"
+            :loading="isGenerating"
+            :disabled="!isAiConfigured || !notePreview || isExtracting || isAnalyzing"
+            @click="handleOneClickGenerate"
+          >
+            {{ generatedDraft ? '重新生成类似笔记' : '生成类似笔记' }}
+          </NButton>
+        </div>
+
+        <NRadioGroup
+          v-if="canSwitchView"
+          v-model:value="contentView"
+          size="small"
+          class="content-view-switch"
+        >
+          <NRadioButton
+            v-for="option in contentViewOptions"
+            :key="option.value"
+            :value="option.value"
+          >
+            {{ option.label }}
+          </NRadioButton>
+        </NRadioGroup>
+
+        <div v-if="showNoteSection && notePreview" class="note-preview-card">
+          <NSpace align="center" justify="space-between" class="preview-meta">
+            <NSpace :size="6">
+              <NTag type="primary" size="small" round :bordered="false">
+                👤 {{ notePreview.author || '未知作者' }}
+              </NTag>
+              <NTag
+                v-if="extractedNoteType === 'video'"
+                type="warning"
+                size="small"
+                round
+                :bordered="false"
+              >
+                视频笔记
+              </NTag>
+            </NSpace>
+            <NButton size="tiny" secondary @click="handleCopyNoteMarkdown">
+              复制 Markdown
+            </NButton>
           </NSpace>
 
           <div v-if="extractedImages.length > 0" class="preview-images-wrap">
+            <NSpace align="center" justify="space-between" class="images-toolbar">
+              <NText depth="3" class="images-toolbar-label">
+                笔记图片 · {{ extractedImages.length }} 张
+              </NText>
+              <NSpace :size="6">
+                <NButton size="tiny" secondary @click="handleCopyNoteImages">
+                  复制图片
+                </NButton>
+                <NButton
+                  size="tiny"
+                  type="primary"
+                  :loading="isDownloadingAllImages"
+                  @click="handleDownloadAllImages"
+                >
+                  全部下载
+                </NButton>
+              </NSpace>
+            </NSpace>
+
             <div class="preview-images">
-              <img
+              <div
                 v-for="(imgUrl, index) in extractedImages"
                 :key="`${imgUrl}-${index}`"
-                :src="imgUrl"
-                loading="lazy"
-                decoding="async"
-                :alt="`笔记图片 ${index + 1}`"
-                class="preview-image"
-              />
+                class="preview-image-item"
+              >
+                <img
+                  :src="imgUrl"
+                  loading="lazy"
+                  decoding="async"
+                  :alt="`笔记图片 ${index + 1}`"
+                  class="preview-image"
+                />
+                <NButton
+                  class="preview-image-download-btn"
+                  size="tiny"
+                  secondary
+                  :loading="downloadingImageIndex === index"
+                  @click="handleDownloadImage(index)"
+                >
+                  下载
+                </NButton>
+              </div>
             </div>
-            <div class="image-count-badge">{{ extractedImages.length }} 张</div>
           </div>
 
           <div class="preview-header">
@@ -302,7 +763,12 @@ onUnmounted(() => {
           </div>
 
           <div class="preview-content">
-            <NText depth="3" class="content-label">完整正文</NText>
+            <NSpace align="center" justify="space-between" class="content-toolbar">
+              <NText depth="3" class="content-label">完整正文</NText>
+              <NButton size="tiny" secondary @click="handleCopyNoteBody">
+                复制正文
+              </NButton>
+            </NSpace>
             <NText depth="2" class="desc-preview">{{ noteBodyText }}</NText>
           </div>
 
@@ -338,12 +804,22 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <div v-if="analysisResult" class="analysis-card">
+        <div v-if="showAnalysisSection && analysisResult" class="analysis-card">
           <NSpace align="center" justify="space-between" class="analysis-header">
-            <NText strong>AI 分析结果</NText>
-            <NTag v-if="analysisResult.score != null" type="success" size="small" round>
-              评分 {{ analysisResult.score }}
-            </NTag>
+            <NSpace align="center" :size="8">
+              <NText strong>AI 分析</NText>
+              <NTag v-if="analysisResult.score != null" type="success" size="small" round>
+                评分 {{ analysisResult.score }}
+              </NTag>
+            </NSpace>
+            <NSpace :size="6">
+              <NButton size="tiny" type="primary" @click="handleCopyAnalysisText">
+                复制
+              </NButton>
+              <NButton size="tiny" secondary @click="handleCopyAnalysisMarkdown">
+                Markdown
+              </NButton>
+            </NSpace>
           </NSpace>
 
           <div class="analysis-block">
@@ -371,7 +847,7 @@ onUnmounted(() => {
           </div>
 
           <div v-if="analysisResult.rewriteSuggestions?.length" class="analysis-block">
-            <NText depth="3" class="analysis-label">改写建议</NText>
+            <NText depth="3" class="analysis-label">爆款创作建议</NText>
             <ul class="analysis-list">
               <li v-for="(item, index) in analysisResult.rewriteSuggestions" :key="index">
                 {{ item }}
@@ -380,9 +856,71 @@ onUnmounted(() => {
           </div>
         </div>
 
+        <div v-if="showDraftSection && generatedDraft" class="draft-card">
+          <NSpace align="center" justify="space-between" class="draft-header">
+            <NText strong>类似笔记</NText>
+            <NSpace :size="6">
+              <NButton size="tiny" type="primary" @click="handleCopyDraftText">
+                复制
+              </NButton>
+              <NButton size="tiny" secondary @click="handleCopyDraftMarkdown">
+                Markdown
+              </NButton>
+            </NSpace>
+          </NSpace>
+
+          <NText depth="3" class="draft-edit-hint">内容可直接编辑，修改后会自动保存</NText>
+
+          <div class="draft-block">
+            <NText depth="3" class="draft-label">标题</NText>
+            <NInput
+              v-model:value="generatedDraft.title"
+              placeholder="输入标题"
+              @update:value="schedulePersistDraft"
+            />
+          </div>
+
+          <div class="draft-block">
+            <NText depth="3" class="draft-label">正文</NText>
+            <NInput
+              v-model:value="generatedDraft.body"
+              type="textarea"
+              placeholder="输入正文"
+              :autosize="{ minRows: 6, maxRows: 16 }"
+              @update:value="schedulePersistDraft"
+            />
+          </div>
+
+          <div class="draft-block">
+            <NText depth="3" class="draft-label">标签</NText>
+            <NDynamicTags
+              v-model:value="generatedDraft.tags"
+              @update:value="schedulePersistDraft"
+            />
+          </div>
+
+          <div class="draft-block">
+            <NText depth="3" class="draft-label">配图建议</NText>
+            <NInput
+              v-model:value="generatedDraft.imageTips"
+              type="textarea"
+              placeholder="配图张数、封面与风格建议（选填）"
+              :autosize="{ minRows: 2, maxRows: 8 }"
+              @update:value="schedulePersistDraft"
+            />
+          </div>
+        </div>
+
         <NText v-if="!notePreview" depth="3" class="empty-hint">
           点击「执行提取」获取当前笔记内容，不会自动执行。
         </NText>
+
+        <footer class="panel-footer">
+          <NText depth="3" class="footer-label">交流反馈</NText>
+          <NText depth="3" class="footer-contact">
+            QQ：{{ CONTACT_QQ }} · 群：{{ CONTACT_GROUP }}
+          </NText>
+        </footer>
       </NSpace>
     </NCard>
   </main>
@@ -418,8 +956,30 @@ onUnmounted(() => {
   display: block;
 }
 
+.generate-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.one-click-generate-btn {
+  background: linear-gradient(135deg, #ff2442 0%, #ff6b81 100%) !important;
+  color: #fff !important;
+  border: none !important;
+  font-weight: 600;
+}
+
+.one-click-generate-btn:hover:not(:disabled) {
+  opacity: 0.92;
+}
+
+.one-click-generate-btn:disabled {
+  opacity: 0.55;
+}
+
 .note-preview-card,
-.analysis-card {
+.analysis-card,
+.draft-card {
   background: #ffffff;
   border: 1px solid #eef0f4;
   border-radius: 10px;
@@ -431,15 +991,80 @@ onUnmounted(() => {
   margin-bottom: 12px;
 }
 
+.app-tagline {
+  display: block;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.api-key-hint {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fff7f0;
+  border: 1px solid #ffe4cc;
+  cursor: pointer;
+}
+
+.api-key-hint-title {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #d46b08;
+  margin-bottom: 4px;
+}
+
+.api-key-hint-text {
+  display: block;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 .support-hint,
 .empty-hint {
   font-size: 12px;
   line-height: 1.5;
 }
 
+.panel-footer {
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid #eef0f4;
+  text-align: center;
+}
+
+.footer-label {
+  display: block;
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+
+.footer-contact {
+  display: block;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.content-view-switch {
+  display: flex;
+  width: 100%;
+  margin-top: 2px;
+}
+
+.content-view-switch :deep(.n-radio-button) {
+  flex: 1;
+  text-align: center;
+}
+
 .preview-images-wrap {
-  position: relative;
   margin-bottom: 12px;
+}
+
+.images-toolbar {
+  margin-bottom: 8px;
+}
+
+.images-toolbar-label {
+  font-size: 12px;
 }
 
 .preview-images {
@@ -449,30 +1074,34 @@ onUnmounted(() => {
   scroll-snap-type: x mandatory;
   -webkit-overflow-scrolling: touch;
   padding-bottom: 4px;
+  align-items: flex-start;
+}
+
+.preview-image-item {
+  position: relative;
+  flex: 0 0 88%;
+  width: 88%;
+  scroll-snap-align: start;
 }
 
 .preview-image {
-  flex: 0 0 88%;
-  width: 88%;
-  height: 220px;
+  width: 100%;
+  height: auto;
   border-radius: 8px;
-  object-fit: cover;
-  scroll-snap-align: start;
+  object-fit: contain;
   background: #f2f3f5;
   display: block;
 }
 
-.image-count-badge {
+.preview-image-download-btn {
   position: absolute;
-  top: 8px;
   right: 8px;
-  background: rgba(0, 0, 0, 0.5);
-  color: #fff;
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 12px;
-  pointer-events: none;
-  z-index: 2;
+  bottom: 8px;
+  background: rgba(255, 255, 255, 0.92) !important;
+}
+
+.content-toolbar {
+  margin-bottom: 6px;
 }
 
 .preview-title {
@@ -567,5 +1196,44 @@ onUnmounted(() => {
   font-size: 13px;
   line-height: 1.7;
   color: #1d2129;
+}
+
+.draft-header {
+  margin-bottom: 8px;
+}
+
+.draft-edit-hint {
+  display: block;
+  font-size: 12px;
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+
+.draft-block + .draft-block,
+.draft-tags + .draft-block {
+  margin-top: 12px;
+}
+
+.draft-label {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.draft-title {
+  font-size: 16px;
+  line-height: 1.4;
+  color: #333;
+}
+
+.draft-text {
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.draft-tags {
+  margin-top: 12px;
 }
 </style>

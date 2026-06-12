@@ -17,6 +17,12 @@ import {
   loadAiSettings,
   saveAiSettings,
 } from '../shared/ai-settings'
+import {
+  API_KEY_SETUP_HINT,
+  CONTACT_GROUP,
+  CONTACT_QQ,
+  DEEPSEEK_API_KEY_URL,
+} from '../shared/brand'
 
 const emit = defineEmits<{
   saved: []
@@ -71,8 +77,24 @@ onMounted(() => {
 
 <template>
   <NSpace vertical :size="14" class="settings-panel">
+    <div class="api-key-notice">
+      <NText class="api-key-notice-title">🍠 首次使用请先申请 API Key</NText>
+      <NText depth="3" class="api-key-notice-text">{{ API_KEY_SETUP_HINT }}</NText>
+      <NButton
+        tag="a"
+        type="primary"
+        size="small"
+        :href="DEEPSEEK_API_KEY_URL"
+        target="_blank"
+        rel="noreferrer"
+      >
+        前往 DeepSeek 申请 API Key
+      </NButton>
+    </div>
+
     <div class="field-block">
-      <NText depth="3" class="field-hint">DeepSeek API Key，仅保存在本机扩展中。</NText>
+      <NText strong class="field-label">DeepSeek API Key</NText>
+      <NText depth="3" class="field-hint">填写后仅保存在本机扩展中，不会上传。</NText>
       <NInput
         v-model:value="apiKey"
         :type="showApiKey ? 'text' : 'password'"
@@ -87,11 +109,11 @@ onMounted(() => {
           text
           tag="a"
           size="small"
-          href="https://platform.deepseek.com/api_keys"
+          :href="DEEPSEEK_API_KEY_URL"
           target="_blank"
           rel="noreferrer"
         >
-          获取 Key
+          打开申请页
         </NButton>
       </NSpace>
     </div>
@@ -117,10 +139,37 @@ onMounted(() => {
       </NButton>
       <NButton @click="emit('close')">取消</NButton>
     </NSpace>
+
+    <div class="settings-footer">
+      <NText depth="3" class="settings-footer-text">
+        问题反馈 QQ：{{ CONTACT_QQ }} · 交流群：{{ CONTACT_GROUP }}
+      </NText>
+    </div>
   </NSpace>
 </template>
 
 <style scoped>
+.api-key-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 8px;
+  background: #fff7f0;
+  border: 1px solid #ffe4cc;
+}
+
+.api-key-notice-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #d46b08;
+}
+
+.api-key-notice-text {
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 .field-block {
   display: flex;
   flex-direction: column;
@@ -134,5 +183,17 @@ onMounted(() => {
 .field-hint {
   font-size: 12px;
   line-height: 1.5;
+}
+
+.settings-footer {
+  padding-top: 4px;
+  border-top: 1px solid #eef0f4;
+}
+
+.settings-footer-text {
+  display: block;
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: center;
 }
 </style>

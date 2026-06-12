@@ -310,23 +310,33 @@ export function injectExtractNote(
       title: text.title?.slice(0, 40),
     })
 
+    const hasContent =
+      hasState
+      || hasDom
+      || Boolean(text.title || text.desc || text.allText)
+
+    // 视频笔记不支持图片轮播解析，但标题/正文/标签等文案仍可提取用于 AI 分析
     if (noteType === 'video') {
       return {
-        ok: false,
+        ok: hasContent,
         url,
         noteId: fromState.noteId,
         isNotePage,
         noteType,
-        source: 'none',
+        source: hasState
+          ? (hasDom ? 'mixed' : 'initial_state')
+          : (hasDom ? 'dom' : 'none'),
         text,
         structured: includeDom ? fromState.structured : null,
         dom,
-        error: '暂仅支持图文笔记，视频笔记暂不支持',
+        ...(hasContent
+          ? {}
+          : { error: '未能提取视频笔记文案，请确认页面已加载完成' }),
       }
     }
 
     return {
-      ok: hasState || hasDom,
+      ok: hasContent,
       url,
       noteId: fromState.noteId,
       isNotePage,
@@ -337,7 +347,7 @@ export function injectExtractNote(
       text,
       structured: includeDom ? fromState.structured : null,
       dom,
-      ...(hasState || hasDom
+      ...(hasContent
         ? {}
         : { error: isNotePage ? '未找到笔记数据' : '当前不是笔记详情页' }),
     }
