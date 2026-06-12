@@ -1,15 +1,28 @@
-import type { DomTreeNode, NoteExtractResult, NoteTextInfo } from './note-types'
+import type {
+  DomTreeNode,
+  NoteExtractResult,
+  NoteMediaType,
+  NoteTextInfo,
+} from './note-types'
 
 /** 判断是否为笔记详情页 URL */
 export function isXhsNoteUrl(url: string): boolean {
   return /xiaohongshu\.com\/(explore|discovery\/item)\/[a-zA-Z0-9]+/.test(url)
 }
 
+export interface InjectExtractNoteOptions {
+  /** 是否提取完整 DOM 快照（树 + outerHTML），默认 true */
+  includeDom?: boolean
+}
+
 /**
  * 注入页面上下文：提取当前小红书笔记文本 + DOM 结构。
  * 必须完全自包含，供 scripting.executeScript 使用。
  */
-export function injectExtractNote(): NoteExtractResult {
+export function injectExtractNote(
+  options: InjectExtractNoteOptions = {},
+): NoteExtractResult {
+  const includeDom = options.includeDom ?? true
   const url = location.href
   const isNotePage = /xiaohongshu\.com\/(explore|discovery\/item)\/[a-zA-Z0-9]+/.test(
     url,
@@ -35,6 +48,45 @@ export function injectExtractNote(): NoteExtractResult {
     collectedCount: '',
     commentCount: '',
     allText: '',
+    images: [],
+  }
+
+  function parseImageUrls(note: Record<string, unknown>): string[] {
+    const imageList = note.imageList
+    if (!Array.isArray(imageList)) return []
+
+    const urls: string[] = []
+    for (const img of imageList) {
+      const item = img as Record<string, unknown>
+      if (typeof item.urlDefault === 'string' && item.urlDefault) {
+        urls.push(item.urlDefault)
+        continue
+      }
+      if (typeof item.url === 'string' && item.url) {
+        urls.push(item.url)
+        continue
+      }
+      const infoList = item.infoList
+      if (Array.isArray(infoList) && infoList.length > 0) {
+        const first = infoList[0] as Record<string, unknown>
+        if (typeof first.url === 'string' && first.url) {
+          urls.push(first.url)
+        }
+      }
+    }
+    return [...new Set(urls)]
+  }
+
+  function extractImagesFromDom(): string[] {
+    const urls = [
+      ...document.querySelectorAll(
+        '.swiper-slide img, .note-slider img, [class*="carousel"] img, [class*="slide"] img, .img-container img',
+      ),
+    ]
+      .map((el) => (el as HTMLImageElement).src)
+      .filter((src) => src.startsWith('http') && !/avatar|icon/i.test(src))
+
+    return [...new Set(urls)]
   }
 
   function textOf(el: Element | null): string {
@@ -76,6 +128,25 @@ export function injectExtractNote(): NoteExtractResult {
 
     if (children.length > 0) node.children = children
     return node
+  }
+
+  function detectVideoFromDom(): boolean {
+    return Boolean(
+      document.querySelector(
+        '#noteContainer video, .note-detail video, .player-container video, video.xgplayer-media',
+      ),
+    )
+  }
+
+  function detectNoteType(note: Record<string, unknown> | null): NoteMediaType {
+    if (!note) {
+      return detectVideoFromDom() ? 'video' : 'normal'
+    }
+
+    const type = String(note.type ?? note.noteType ?? '').toLowerCase()
+    if (type === 'video') return 'video'
+    if (note.video != null || note.videoInfo != null) return 'video'
+    return detectVideoFromDom() ? 'video' : 'normal'
   }
 
   function extractFromDom(): Partial<NoteTextInfo> {
@@ -128,7 +199,8 @@ export function injectExtractNote(): NoteExtractResult {
       likedCount,
       collectedCount,
       commentCount,
-      allText: allText.slice(0, 8000),
+      allText,
+      images: extractImagesFromDom(),
     }
   }
 
@@ -192,6 +264,7 @@ export function injectExtractNote(): NoteExtractResult {
         likedCount: String(interact.likedCount ?? ''),
         collectedCount: String(interact.collectedCount ?? ''),
         commentCount: String(interact.commentCount ?? ''),
+        images: parseImageUrls(note),
       },
     }
   }
@@ -217,7 +290,7 @@ export function injectExtractNote(): NoteExtractResult {
         .join('\n')
     }
 
-    const root = findNoteRoot()
+    const root = includeDom ? findNoteRoot() : null
     const dom = root
       ? {
           rootSelector: root.selector,
@@ -226,25 +299,43 @@ export function injectExtractNote(): NoteExtractResult {
         }
       : null
 
+    const noteType = detectNoteType(fromState.structured)
     const hasState = fromState.structured != null
     const hasDom = Boolean(text.title || text.desc || text.allText)
 
     console.info('[RedCopy] 笔记提取完成', {
       noteId: fromState.noteId,
+      noteType,
       source: hasState ? (hasDom ? 'mixed' : 'initial_state') : 'dom',
       title: text.title?.slice(0, 40),
     })
+
+    if (noteType === 'video') {
+      return {
+        ok: false,
+        url,
+        noteId: fromState.noteId,
+        isNotePage,
+        noteType,
+        source: 'none',
+        text,
+        structured: includeDom ? fromState.structured : null,
+        dom,
+        error: '暂仅支持图文笔记，视频笔记暂不支持',
+      }
+    }
 
     return {
       ok: hasState || hasDom,
       url,
       noteId: fromState.noteId,
       isNotePage,
+      noteType,
       source: hasState
         ? (hasDom ? 'mixed' : 'initial_state')
         : (hasDom ? 'dom' : 'none'),
       text,
-      structured: fromState.structured,
+      structured: includeDom ? fromState.structured : null,
       dom,
       ...(hasState || hasDom
         ? {}
@@ -258,6 +349,7 @@ export function injectExtractNote(): NoteExtractResult {
       url,
       noteId: null,
       isNotePage,
+      noteType: detectVideoFromDom() ? 'video' : 'normal',
       source: 'none',
       text: emptyText,
       structured: null,

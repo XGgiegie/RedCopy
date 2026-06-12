@@ -2,194 +2,317 @@
 import {
   NButton,
   NCard,
-  NCode,
-  NCollapse,
-  NCollapseItem,
+  NModal,
   NSpace,
   NTag,
   NText,
-  NCarousel, // 新增：轮播图组件
-  NImage,    // 新增：图片组件
   useMessage,
 } from 'naive-ui'
-import { onMounted, ref, computed } from 'vue'
-import { isXhsNoteUrl } from '../shared/extract-note'
-import type { NoteExtractResult } from '../shared/note-types'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import type { AiAnalysisResult } from '../shared/ai-types'
+import { loadLastAnalysis, saveLastAnalysis } from '../shared/analysis-storage'
+import { isAiSettingsReady, loadAiSettings } from '../shared/ai-settings'
+import { loadLastExtract, saveLastExtract } from '../shared/extract-storage'
+import type { NoteExtractResult, NoteTextInfo } from '../shared/note-types'
+import { analyzeNoteText } from './analyze-note'
 import { extractNoteFromTab } from './extract-note'
+import SettingsPanel from './SettingsPanel.vue'
+import { useNotePageWatch } from './use-note-page-watch'
 
 const message = useMessage()
 const isXhsPage = ref(false)
 const isNotePage = ref(false)
-const pageTitle = ref('检测中…')
 const isExtracting = ref(false)
-const noteResult = ref<NoteExtractResult | null>(null)
+const isAnalyzing = ref(false)
+const isAiConfigured = ref(false)
+const showAiSettings = ref(false)
+const notePreview = ref<NoteTextInfo | null>(null)
+const analysisResult = ref<AiAnalysisResult | null>(null)
+const lastExtractMeta = ref<{ noteId: string | null; url: string } | null>(null)
 
-// 工具函数：获取图片列表 (兼容不同命名习惯，请根据你的实际数据结构调整)
-const extractedImages = computed(() => {
-  if (!noteResult.value) return []
-  // 假设你的图片数组可能叫 images, imageList 等
-  const data = noteResult.value.text || {}
-  return data.images || data.imageList || noteResult.value.images || []
+const extractedImages = computed(() => notePreview.value?.images ?? [])
+
+const noteBodyText = computed(() => {
+  const note = notePreview.value
+  if (!note) return ''
+  if (note.desc) return note.desc
+  if (note.allText) return note.allText
+  return '（无正文）'
 })
 
-// 工具函数：格式化时间戳
-function formatTime(timestamp?: string | number) {
-  if (!timestamp) return '未知时间'
-  const date = new Date(Number(timestamp))
-  return isNaN(date.getTime()) 
-    ? '未知时间' 
-    : `${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+async function refreshAiSettings() {
+  const settings = await loadAiSettings()
+  isAiConfigured.value = isAiSettingsReady(settings)
 }
 
-async function extractCurrentNote(tabId: number) {
+async function restoreLastExtract() {
+  const saved = await loadLastExtract()
+  if (!saved) return
+
+  notePreview.value = saved.note
+  lastExtractMeta.value = { noteId: saved.noteId, url: saved.url }
+  console.info('[RedCopy] 已恢复上次提取', { noteId: saved.noteId })
+}
+
+async function restoreLastAnalysis() {
+  const saved = await loadLastAnalysis()
+  if (!saved) return
+
+  analysisResult.value = saved.analysis
+  console.info('[RedCopy] 已恢复上次分析', { noteId: saved.noteId })
+}
+
+function openSettingsPanel() {
+  showAiSettings.value = true
+}
+
+function handleSettingsSaved() {
+  showAiSettings.value = false
+  void refreshAiSettings()
+}
+
+useNotePageWatch(isXhsPage, isNotePage)
+
+async function handleExtract() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+
+  if (!tab?.id || !isNotePage.value) {
+    message.warning('请先打开小红书图文笔记详情页')
+    return
+  }
+
   isExtracting.value = true
-  noteResult.value = null
 
+  // 第一步：提取笔记内容
+  let extract: NoteExtractResult
   try {
-    const result = await extractNoteFromTab(tabId)
-    noteResult.value = result
-
-    if (result.ok) {
-      message.success('笔记内容已提取')
-      console.info('[RedCopy] 笔记数据', result)
-    } else {
-      message.warning(result.error ?? '未能提取笔记内容')
-    }
+    console.info('[RedCopy] 开始提取', { tabId: tab.id })
+    extract = await extractNoteFromTab(tab.id, { includeDom: false })
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error)
-    console.error('[RedCopy] 提取失败', detail, error)
+    console.error('[RedCopy] 提取请求失败', detail, error)
     message.error(`提取失败：${detail}`)
+    isExtracting.value = false
+    return
+  }
+
+  if (!extract.ok) {
+    console.warn('[RedCopy] 提取未成功', { error: extract.error })
+    message.warning(extract.error ?? '未能提取笔记内容')
+    isExtracting.value = false
+    return
+  }
+
+  // 提取成功：先展示并提示，保存失败不影响该结果
+  notePreview.value = extract.text
+  lastExtractMeta.value = { noteId: extract.noteId, url: extract.url }
+  message.success('笔记内容已提取')
+  console.info('[RedCopy] 提取成功', {
+    noteId: extract.noteId,
+    images: extract.text.images?.length ?? 0,
+    descLength: extract.text.desc?.length ?? 0,
+  })
+
+  // 第二步：保存上次提取结果（独立处理，失败仅提示，不报“提取失败”）
+  try {
+    await saveLastExtract({
+      noteId: extract.noteId,
+      url: extract.url,
+      note: extract.text,
+    })
+    console.info('[RedCopy] 提取结果已保存', { noteId: extract.noteId })
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    console.error('[RedCopy] 保存提取结果失败', detail, error)
+    message.warning('提取成功，但本地保存失败')
   } finally {
     isExtracting.value = false
   }
 }
 
-async function checkXhsPage() {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-  const url = tab?.url ?? ''
-  const matched = /xiaohongshu\.com/.test(url)
-  const note = isXhsNoteUrl(url)
-
-  isXhsPage.value = matched
-  isNotePage.value = note
-  pageTitle.value = matched ? tab?.title ?? '当前页面' : '未在小红书页面'
-
-  if (!matched) {
-    message.warning('请在小红书页面使用')
+async function handleAiAnalyze() {
+  if (!notePreview.value) {
+    message.warning('请先执行提取，再进行分析')
     return
   }
 
-  if (!note) {
-    message.info('请打开一篇笔记详情页（/explore/xxx）')
+  if (!lastExtractMeta.value) {
+    message.warning('缺少笔记元数据，请重新提取后再分析')
     return
   }
 
-  message.success('已识别笔记页面')
-  if (tab?.id != null) {
-    await extractCurrentNote(tab.id)
-  }
-}
+  isAnalyzing.value = true
 
-function handleExtract() {
-  chrome.tabs.query({ active: true, currentWindow: true }, async ([tab]) => {
-    if (!tab?.id || !isNotePage.value) {
-      message.warning('请先打开小红书笔记详情页')
-      return
+  try {
+    const analysis = await analyzeNoteText({
+      noteId: lastExtractMeta.value.noteId,
+      url: lastExtractMeta.value.url,
+      text: notePreview.value,
+    })
+
+    analysisResult.value = analysis
+
+    try {
+      await saveLastAnalysis({
+        noteId: lastExtractMeta.value.noteId,
+        url: lastExtractMeta.value.url,
+        analyzedAt: Date.now(),
+        note: notePreview.value,
+        analysis,
+      })
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      console.error('[RedCopy] 保存分析结果失败', detail, error)
+      message.warning('分析成功，但本地保存失败')
     }
-    await extractCurrentNote(tab.id)
-  })
-}
 
-function handleCopy() {
-  if (!noteResult.value) return
-  const payload = JSON.stringify(noteResult.value, null, 2)
-  navigator.clipboard.writeText(payload).then(
-    () => message.success('已复制完整 JSON 到剪贴板'),
-    () => message.error('复制失败'),
-  )
-}
-
-function handleCopyDom() {
-  if (!noteResult.value?.dom?.tree) {
-    message.warning('未获取到 DOM 结构')
-    return
+    message.success('AI 分析完成')
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    console.error('[RedCopy] AI 分析失败', detail, error)
+    message.error(`分析失败：${detail}`)
+  } finally {
+    isAnalyzing.value = false
   }
-  const payload = JSON.stringify(noteResult.value.dom.tree, null, 2)
-  navigator.clipboard.writeText(payload).then(
-    () => message.success('已复制 DOM 结构'),
-    () => message.error('复制失败'),
-  )
 }
 
-onMounted(checkXhsPage)
+function handleStorageChanged(
+  changes: Record<string, chrome.storage.StorageChange>,
+  areaName: string,
+) {
+  if (areaName !== 'local' || !changes['redcopy:aiSettings']) return
+  void refreshAiSettings()
+}
+
+onMounted(() => {
+  // 侧栏为原生扩展上下文，chrome.storage 通常可用；仍做保护避免异常
+  chrome.storage?.onChanged?.addListener(handleStorageChanged)
+  void Promise.all([
+    restoreLastExtract(),
+    restoreLastAnalysis(),
+    refreshAiSettings(),
+  ])
+})
+
+onUnmounted(() => {
+  chrome.storage?.onChanged?.removeListener(handleStorageChanged)
+})
 </script>
 
 <template>
-  <main class="popup">
-    <NCard title="小红书爆款解析助手" size="small" :bordered="false">
+  <main class="panel">
+    <NModal
+      v-model:show="showAiSettings"
+      preset="card"
+      title="更换 API Key"
+      :bordered="false"
+      size="small"
+      style="width: 92%; max-width: 360px;"
+      @after-leave="void refreshAiSettings()"
+    >
+      <SettingsPanel
+        @saved="handleSettingsSaved"
+        @close="showAiSettings = false"
+      />
+    </NModal>
+
+    <NCard
+      title="小红书爆款解析助手"
+      size="small"
+      :bordered="false"
+      class="panel-card"
+    >
+      <template #header-extra>
+        <NButton
+          quaternary
+          circle
+          size="small"
+          title="更换 API Key"
+          class="settings-gear-btn"
+          @click="openSettingsPanel"
+        >
+          <svg class="gear-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.52-.4-1.08-.73-1.69-.98l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.61.25-1.17.59-1.69.98l-2.39-.96a.488.488 0 0 0-.59.22l-1.92 3.32c-.12.22-.09.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.52.4 1.08.73 1.69.98l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.61-.25 1.17-.59 1.69-.98l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.09-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
+          </svg>
+        </NButton>
+      </template>
+
       <NSpace vertical :size="12">
         <NSpace align="center" justify="space-between">
-          <NText depth="3" style="font-size: 12px;">提取当前笔记文本与结构</NText>
-          <NTag :type="isNotePage ? 'success' : isXhsPage ? 'warning' : 'default'" size="small" round>
-            {{ isNotePage ? '已就绪' : isXhsPage ? '非笔记页' : '未命中' }}
-          </NTag>
+          <NText depth="3" style="font-size: 12px;">提取与分析图文笔记</NText>
+          <NSpace :size="6">
+            <NTag type="info" size="small" round :bordered="false">仅图文</NTag>
+            <NTag :type="isNotePage ? 'success' : isXhsPage ? 'warning' : 'default'" size="small" round>
+              {{ isNotePage ? '已就绪' : isXhsPage ? '非笔记页' : '未命中' }}
+            </NTag>
+          </NSpace>
         </NSpace>
 
-        <!-- 美化后的数据展示卡片 -->
-        <div v-if="noteResult?.ok" class="note-preview-card">
-          
-          <!-- 作者与元数据 -->
-          <NSpace align="center" justify="space-between" class="preview-meta">
-            <NTag type="primary" size="small" round bordered="false">
-              👤 {{ noteResult.text.author || '未知作者' }}
+        <NText depth="3" class="support-hint">
+          暂不支持视频笔记，请打开图文笔记详情页后操作。
+        </NText>
+
+        <NSpace vertical :size="8">
+          <NButton
+            type="primary"
+            block
+            :loading="isExtracting"
+            :disabled="!isNotePage"
+            @click="handleExtract"
+          >
+            {{ notePreview ? '重新提取笔记' : '执行提取' }}
+          </NButton>
+
+          <NButton
+            block
+            secondary
+            :loading="isAnalyzing"
+            :disabled="!isAiConfigured || !notePreview"
+            :title="!isAiConfigured ? '请先点击右上角齿轮配置 API Key' : ''"
+            @click="handleAiAnalyze"
+          >
+            {{ analysisResult ? '重新 AI 分析' : 'AI 分析' }}
+          </NButton>
+        </NSpace>
+
+        <div v-if="notePreview" class="note-preview-card">
+          <NSpace align="center" class="preview-meta">
+            <NTag type="primary" size="small" round :bordered="false">
+              👤 {{ notePreview.author || '未知作者' }}
             </NTag>
-            <NText depth="3" style="font-size: 12px;">
-              {{ formatTime(noteResult.text.publishTime) }}
-            </NText>
           </NSpace>
 
-          <!-- 新增：图片展示区 (轮播图) -->
-          <div v-if="extractedImages.length > 0" class="preview-carousel-wrap">
-            <NCarousel
-              effect="slide"
-              centered-slides
-              show-arrow
-              dot-type="line"
-              class="note-carousel"
-            >
-              <!-- 为了视觉效果好，这里用 NImage 组件，支持点击放大预览 -->
-              <NImage
+          <div v-if="extractedImages.length > 0" class="preview-images-wrap">
+            <div class="preview-images">
+              <img
                 v-for="(imgUrl, index) in extractedImages"
-                :key="index"
+                :key="`${imgUrl}-${index}`"
                 :src="imgUrl"
-                object-fit="cover"
-                class="carousel-image"
+                loading="lazy"
+                decoding="async"
+                :alt="`笔记图片 ${index + 1}`"
+                class="preview-image"
               />
-            </NCarousel>
-            <!-- 左上角显示图片数量角标 -->
-            <div class="image-count-badge">1 / {{ extractedImages.length }}</div>
+            </div>
+            <div class="image-count-badge">{{ extractedImages.length }} 张</div>
           </div>
 
-          <!-- 标题区 -->
           <div class="preview-header">
-            <NText strong class="preview-title">{{ noteResult.text.title || '（无标题）' }}</NText>
+            <NText strong class="preview-title">{{ notePreview.title || '（无标题）' }}</NText>
           </div>
 
-          <!-- 正文预览 -->
           <div class="preview-content">
-            <NText depth="2" class="desc-preview">
-              {{ noteResult.text.desc || noteResult.text.allText?.slice(0, 200) }}
-            </NText>
+            <NText depth="3" class="content-label">完整正文</NText>
+            <NText depth="2" class="desc-preview">{{ noteBodyText }}</NText>
           </div>
 
-          <!-- 标签区 -->
-          <NSpace v-if="noteResult.text.tags && noteResult.text.tags.length" :size="6" class="preview-tags">
-            <NTag 
-              v-for="tag in noteResult.text.tags" 
-              :key="tag" 
-              type="error" 
-              size="small" 
-              round 
+          <NSpace v-if="notePreview.tags?.length" :size="6" class="preview-tags">
+            <NTag
+              v-for="tag in notePreview.tags"
+              :key="tag"
+              type="error"
+              size="small"
+              round
               :bordered="false"
               style="background-color: #ffeef0; color: #ff2442;"
             >
@@ -197,106 +320,145 @@ onMounted(checkXhsPage)
             </NTag>
           </NSpace>
 
-          <!-- 互动数据看板 -->
           <div class="preview-stats">
             <div class="stat-item">
               <span class="stat-label">❤️ 点赞</span>
-              <span class="stat-value">{{ noteResult.text.likedCount || 0 }}</span>
+              <span class="stat-value">{{ notePreview.likedCount || 0 }}</span>
             </div>
             <div class="stat-divider"></div>
             <div class="stat-item">
               <span class="stat-label">⭐ 收藏</span>
-              <span class="stat-value">{{ noteResult.text.collectedCount || 0 }}</span>
+              <span class="stat-value">{{ notePreview.collectedCount || 0 }}</span>
             </div>
             <div class="stat-divider"></div>
             <div class="stat-item">
               <span class="stat-label">💬 评论</span>
-              <span class="stat-value">{{ noteResult.text.commentCount || 0 }}</span>
+              <span class="stat-value">{{ notePreview.commentCount || 0 }}</span>
             </div>
           </div>
         </div>
 
-        <!-- 按钮组 -->
-        <NButton
-          type="primary"
-          block
-          :loading="isExtracting"
-          :disabled="!isNotePage"
-          @click="handleExtract"
-        >
-          {{ noteResult?.ok ? '重新提取笔记' : '提取笔记内容' }}
-        </NButton>
-
-        <NSpace v-if="noteResult?.ok" vertical :size="8">
-          <NSpace :wrap="false">
-            <NButton block secondary @click="handleCopy" style="flex: 1;">
-              复制完整 JSON
-            </NButton>
-            <NButton v-if="noteResult.dom?.tree" block type="primary" secondary @click="handleCopyDom" style="flex: 1; margin: 0;">
-              复制 DOM 树
-            </NButton>
+        <div v-if="analysisResult" class="analysis-card">
+          <NSpace align="center" justify="space-between" class="analysis-header">
+            <NText strong>AI 分析结果</NText>
+            <NTag v-if="analysisResult.score != null" type="success" size="small" round>
+              评分 {{ analysisResult.score }}
+            </NTag>
           </NSpace>
-        </NSpace>
 
-        <!-- 开发者视图 -->
-        <NCollapse v-if="noteResult" class="dev-collapse">
-          <NCollapseItem title="📦 开发者视图：原始提取字段" name="text">
-            <NCode :code="JSON.stringify(noteResult.text, null, 2)" language="json" word-wrap />
-          </NCollapseItem>
-          <NCollapseItem v-if="noteResult.dom?.tree" title="🌳 DOM 树结构" name="dom">
-            <NCode :code="JSON.stringify(noteResult.dom.tree, null, 2)" language="json" word-wrap />
-          </NCollapseItem>
-          <NCollapseItem v-if="noteResult.structured" title="⚙️ 结构化数据 (State)" name="state">
-            <NCode :code="JSON.stringify(noteResult.structured, null, 2)" language="json" word-wrap />
-          </NCollapseItem>
-        </NCollapse>
+          <div class="analysis-block">
+            <NText depth="3" class="analysis-label">总结</NText>
+            <NText class="analysis-text">{{ analysisResult.summary }}</NText>
+          </div>
+
+          <div v-if="analysisResult.titleAnalysis" class="analysis-block">
+            <NText depth="3" class="analysis-label">标题分析</NText>
+            <NText class="analysis-text">{{ analysisResult.titleAnalysis }}</NText>
+          </div>
+
+          <div v-if="analysisResult.contentStructure?.length" class="analysis-block">
+            <NText depth="3" class="analysis-label">内容结构</NText>
+            <ul class="analysis-list">
+              <li v-for="(item, index) in analysisResult.contentStructure" :key="index">
+                {{ item }}
+              </li>
+            </ul>
+          </div>
+
+          <div v-if="analysisResult.engagementInsight" class="analysis-block">
+            <NText depth="3" class="analysis-label">互动洞察</NText>
+            <NText class="analysis-text">{{ analysisResult.engagementInsight }}</NText>
+          </div>
+
+          <div v-if="analysisResult.rewriteSuggestions?.length" class="analysis-block">
+            <NText depth="3" class="analysis-label">改写建议</NText>
+            <ul class="analysis-list">
+              <li v-for="(item, index) in analysisResult.rewriteSuggestions" :key="index">
+                {{ item }}
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <NText v-if="!notePreview" depth="3" class="empty-hint">
+          点击「执行提取」获取当前笔记内容，不会自动执行。
+        </NText>
       </NSpace>
     </NCard>
   </main>
 </template>
 
 <style scoped>
-.popup {
-  width: 380px;
-  max-height: 600px; /* 为了放得下图片稍微加高一点 */
+.panel {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
   overflow-y: auto;
+  overflow-x: hidden;
   background: #f7f8fa;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 }
 
-.note-preview-card {
+.panel-card {
+  min-height: 100%;
+  border-radius: 0;
+}
+
+.settings-gear-btn {
+  color: #86909c;
+}
+
+.settings-gear-btn:hover {
+  color: #ff2442;
+}
+
+.gear-icon {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+.note-preview-card,
+.analysis-card {
   background: #ffffff;
   border: 1px solid #eef0f4;
   border-radius: 10px;
   padding: 16px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
-  margin-top: 4px;
-  margin-bottom: 8px;
 }
 
 .preview-meta {
   margin-bottom: 12px;
 }
 
-/* 轮播图样式 */
-.preview-carousel-wrap {
+.support-hint,
+.empty-hint {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.preview-images-wrap {
   position: relative;
-  width: 100%;
-  height: 240px;
-  border-radius: 8px;
-  overflow: hidden;
   margin-bottom: 12px;
+}
+
+.preview-images {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 4px;
+}
+
+.preview-image {
+  flex: 0 0 88%;
+  width: 88%;
+  height: 220px;
+  border-radius: 8px;
+  object-fit: cover;
+  scroll-snap-align: start;
   background: #f2f3f5;
-}
-
-.note-carousel {
-  width: 100%;
-  height: 100%;
-}
-
-.carousel-image {
-  width: 100%;
-  height: 240px;
   display: block;
 }
 
@@ -326,14 +488,15 @@ onMounted(checkXhsPage)
   border-radius: 6px;
 }
 
+.content-label {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
 .desc-preview {
   font-size: 13px;
-  line-height: 1.6;
-  display: -webkit-box;
-  -webkit-line-clamp: 4;
-  line-clamp: 4;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  line-height: 1.7;
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -377,18 +540,32 @@ onMounted(checkXhsPage)
   background-color: #e5e6eb;
 }
 
-.dev-collapse {
-  margin-top: 8px;
-  background: #fff;
-  padding: 0 12px;
-  border-radius: 8px;
-  border: 1px solid #eef0f4;
+.analysis-header {
+  margin-bottom: 12px;
 }
 
-/* 覆盖 Naive UI 轮播图内部图片的 object-fit 行为 */
-:deep(.n-image img) {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+.analysis-block + .analysis-block {
+  margin-top: 12px;
+}
+
+.analysis-label {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.analysis-text {
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.analysis-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #1d2129;
 }
 </style>

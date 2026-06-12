@@ -17,16 +17,27 @@ export default defineManifest({
       128: 'public/icons/icon-128.png',
     },
     default_title: 'RedCopy',
-    default_popup: 'src/popup/index.html',
   },
+  side_panel: {
+    default_path: 'src/sidepanel/index.html',
+  },
+  options_page: 'src/options/index.html',
   background: {
     service_worker: 'src/background/index.ts',
     type: 'module',
   },
-  permissions: ['activeTab', 'scripting'],
+  permissions: [
+    'activeTab',
+    'scripting',
+    'sidePanel',
+    'storage',
+    'tabs',
+    'webNavigation',
+  ],
   host_permissions: [
     '*://*.xiaohongshu.com/*',
     'http://localhost:5173/*',
     'http://127.0.0.1:5173/*',
+    'https://api.deepseek.com/*',
   ],
 })
