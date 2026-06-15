@@ -146,10 +146,10 @@ export async function requestDeepSeekGenerate(
 ): Promise<GeneratedNoteDraft> {
   const { client, settings } = await createDeepSeekClient()
   const userPrompt = buildGenerateUserPrompt(payload)
-  const params = buildCompletionParams(settings.model, userPrompt)
+  const params = buildCompletionParams(settings.deepseek.model, userPrompt)
 
   console.info('[RedCopy] 请求 DeepSeek 生成爆款笔记', {
-    model: settings.model,
+    model: settings.deepseek.model,
     noteId: payload.noteId,
     hasAnalysis: Boolean(payload.analysis),
   })

@@ -1,0 +1,37 @@
+/* 侧栏内容卡片通用样式 */
+.content-card {
+  background: #ffffff;
+  border: 1px solid #eef0f4;
+  border-radius: 10px;
+  padding: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+}
+
+.content-card-header {
+  margin-bottom: 12px;
+}
+
+.content-block + .content-block {
+  margin-top: 12px;
+}
+
+.content-label {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.content-text {
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.content-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #1d2129;
+}

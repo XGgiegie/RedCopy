@@ -2,7 +2,7 @@ import OpenAI from 'openai'
 import {
   DEEPSEEK_BASE_URL,
   type AiSettings,
-  isAiSettingsReady,
+  isGenerateConfigured,
   loadAiSettings,
 } from './ai-settings'
 
@@ -10,13 +10,13 @@ import {
 export async function createDeepSeekClient(settings?: AiSettings) {
   const resolvedSettings = settings ?? (await loadAiSettings())
 
-  if (!isAiSettingsReady(resolvedSettings)) {
+  if (!isGenerateConfigured(resolvedSettings)) {
     throw new Error('请先在设置页配置 DeepSeek API Key')
   }
 
   const client = new OpenAI({
     baseURL: DEEPSEEK_BASE_URL,
-    apiKey: resolvedSettings.apiKey,
+    apiKey: resolvedSettings.deepseek.apiKey,
     dangerouslyAllowBrowser: true,
   })
 

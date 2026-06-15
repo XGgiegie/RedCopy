@@ -39,5 +39,6 @@ export default defineManifest({
     '*://*.xiaohongshu.com/*',
     '*://*.xhscdn.com/*',
     'https://api.deepseek.com/*',
+    'https://ark.cn-beijing.volces.com/*',
   ],
 })

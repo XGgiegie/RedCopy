@@ -1,8 +1,8 @@
-import type { NoteExtractResult } from '../shared/note-types'
+import type { NoteExtractResult } from '../../shared/note-types'
 import {
   EXTRACT_NOTE_MESSAGE,
   type ExtractNoteResponse,
-} from '../shared/messages'
+} from '../../shared/messages'
 
 export interface ExtractNoteOptions {
   includeDom?: boolean

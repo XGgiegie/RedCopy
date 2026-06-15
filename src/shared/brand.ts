@@ -8,6 +8,8 @@ export const CONTACT_QQ = '1653444718'
 export const CONTACT_GROUP = '870774371'
 
 export const DEEPSEEK_API_KEY_URL = 'https://platform.deepseek.com/api_keys'
+export const DOUBAO_API_KEY_URL =
+  'https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey'
 
 export const API_KEY_SETUP_HINT =
-  '使用 AI 分析前，请先配置 DeepSeek API Key。需前往官网自行申请，Key 仅保存在本机。'
+  '填写 API Key 即可，分析模型在笔记详情页切换服务商。Key 仅保存在本机。'

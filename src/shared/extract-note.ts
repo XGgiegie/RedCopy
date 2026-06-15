@@ -28,6 +28,16 @@ export function injectExtractNote(
     url,
   )
 
+  /** 从 URL 解析当前笔记 ID（SPA 下用于定位当前笔记，避免取到历史缓存里的其它笔记） */
+  function parseNoteIdFromUrl(href: string): string | null {
+    const match = href.match(
+      /xiaohongshu\.com\/(?:explore|discovery\/item)\/([a-zA-Z0-9]+)/,
+    )
+    return match?.[1] ?? null
+  }
+
+  const urlNoteId = parseNoteIdFromUrl(url)
+
   const NOTE_ROOT_SELECTORS = [
     '#noteContainer',
     '.note-detail',
@@ -224,18 +234,26 @@ export function injectExtractNote(
 
     const noteModule = win.__INITIAL_STATE__?.note
     if (!noteModule?.noteDetailMap) {
-      return { noteId: null, structured: null, partial: {} }
+      return { noteId: urlNoteId, structured: null, partial: {} }
     }
 
-    let noteId =
-      noteModule.firstNoteId?.value
-      ?? noteModule.currentNoteId
-      ?? null
-
     const map = noteModule.noteDetailMap
-    if (!noteId || !map[noteId]) {
-      const keys = Object.keys(map)
-      noteId = keys[0] ?? null
+
+    // 优先用 URL 中的笔记 ID 定位当前笔记。
+    // 小红书 SPA 的 noteDetailMap 会累积浏览过的多篇笔记，
+    // 而 firstNoteId 始终指向本次会话第一篇笔记，直接使用会导致
+    // 当前笔记（尤其是无标题笔记）错误地取到上一篇笔记的标题等内容。
+    let noteId: string | null = null
+    if (urlNoteId && map[urlNoteId]) {
+      noteId = urlNoteId
+    } else {
+      noteId =
+        noteModule.currentNoteId
+        ?? noteModule.firstNoteId?.value
+        ?? null
+      if (!noteId || !map[noteId]) {
+        noteId = urlNoteId ?? Object.keys(map)[0] ?? null
+      }
     }
 
     if (!noteId || !map[noteId]?.note) {

@@ -1,5 +1,5 @@
 import { onMounted, onUnmounted, type Ref } from 'vue'
-import { isXhsNoteUrl } from '../shared/extract-note'
+import { isXhsNoteUrl } from '../../shared/extract-note'
 
 function applyPageUrl(
   url: string,
