@@ -2,6 +2,18 @@ import type { DraftImagePrompt, GeneratedNoteDraft } from './ai-types'
 
 export const DOUBAO_IMAGE_MODEL = 'doubao-seedream-5-0-260128'
 
+/** 配图生成统一约束：画面中不得出现任何文字（发送给 Seedream 时自动追加） */
+export const IMAGE_NO_TEXT_SUFFIX =
+  '画面中不得出现任何文字、字母、数字、标语、水印或排版文字，纯视觉画面'
+
+/** 为文生图/图生图提示词追加「无文字」约束（已包含则跳过，避免重复） */
+export function appendImageNoTextConstraint(prompt: string): string {
+  const trimmed = prompt.trim()
+  if (!trimmed) return trimmed
+  if (/不得出现任何文字|无文字|no text/i.test(trimmed)) return trimmed
+  return `${trimmed}，${IMAGE_NO_TEXT_SUFFIX}`
+}
+
 /** 可选生成尺寸（火山方舟 Seedream 2K 档位） */
 export interface ImageSizeOption {
   /** 下拉展示文案 */

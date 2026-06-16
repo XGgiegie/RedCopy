@@ -33,6 +33,7 @@ import { type Task, deleteTask, getTask, updateTask } from '../../../shared/task
 import type { ContentView, ContentViewOption } from '../../types/content-view'
 import { analyzeNoteText } from '../../services/analyze-note'
 import { generateNoteDraft } from '../../services/generate-note'
+import { openPublishPage } from '../../services/publish-to-xhs'
 import AnalysisCard from './AnalysisCard.vue'
 import AnalyzeBar from './AnalyzeBar.vue'
 import ContentViewTabs from './ContentViewTabs.vue'
@@ -61,6 +62,7 @@ const isGenerating = computed(() => taskOps.isGenerating(taskId.value))
 const showGenerateDialog = ref(false)
 const isDownloadingAllImages = ref(false)
 const downloadingImageIndex = ref<number | null>(null)
+const isOpeningPublish = ref(false)
 
 // ── AI 设置（任务页内联，仅本页消费） ────────────────────────
 
@@ -360,6 +362,22 @@ async function handleDeleteImage(recordId: string) {
   console.info('[RedCopy] 已从配图历史删除', { id, recordId })
 }
 
+// ── 打开小红书发布页 ─────────────────────────────────────────
+
+async function handleOpenPublishPage() {
+  isOpeningPublish.value = true
+  try {
+    await openPublishPage()
+    message.success('已打开小红书发布页')
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    console.error('[RedCopy] 打开发布页失败', detail, error)
+    message.error(`打开失败：${detail}`)
+  } finally {
+    isOpeningPublish.value = false
+  }
+}
+
 // ── 复制 / 下载 ─────────────────────────────────────────────
 
 function imageDownloadContext() {
@@ -601,11 +619,13 @@ onUnmounted(() => {
         :task-id="taskId"
         :is-generate-ready="isGenerateReady"
         :image-history="imageHistory"
+        :is-opening-publish="isOpeningPublish"
         @copy-text="handleCopyDraftText"
         @copy-markdown="handleCopyDraftMarkdown"
         @edit="scheduleDraftPersist"
         @generated="handleImageGenerated"
         @delete-image="handleDeleteImage"
+        @open-publish-page="handleOpenPublishPage"
       />
     </template>
 

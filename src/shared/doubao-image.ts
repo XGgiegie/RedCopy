@@ -1,6 +1,6 @@
 import type { AiSettings } from './ai-settings'
 import { DOUBAO_BASE_URL } from './ai-settings'
-import { DEFAULT_IMAGE_SIZE, DOUBAO_IMAGE_MODEL } from './draft-image'
+import { DEFAULT_IMAGE_SIZE, DOUBAO_IMAGE_MODEL, appendImageNoTextConstraint } from './draft-image'
 import { resolveDoubaoSettings } from './doubao-api'
 
 export interface ImageGenerationOptions {
@@ -21,7 +21,7 @@ interface ImageGenerationResponse {
 export async function requestDoubaoImageGeneration(
   options: ImageGenerationOptions,
 ): Promise<string> {
-  const prompt = options.prompt.trim()
+  const prompt = appendImageNoTextConstraint(options.prompt.trim())
   if (!prompt) {
     throw new Error('配图提示词不能为空')
   }

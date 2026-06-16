@@ -14,6 +14,7 @@ defineProps<{
   taskId: string
   isGenerateReady: boolean
   imageHistory: GeneratedImageRecord[]
+  isOpeningPublish: boolean
 }>()
 
 defineEmits<{
@@ -22,6 +23,7 @@ defineEmits<{
   edit: []
   generated: [record: GeneratedImageRecord]
   deleteImage: [recordId: string]
+  openPublishPage: []
 }>()
 </script>
 
@@ -30,6 +32,14 @@ defineEmits<{
     <NSpace align="center" justify="space-between" class="draft-header">
       <NText strong>类似笔记</NText>
       <NSpace :size="6">
+        <NButton
+          size="tiny"
+          type="warning"
+          :loading="isOpeningPublish"
+          @click="$emit('openPublishPage')"
+        >
+          打开发布页
+        </NButton>
         <NButton size="tiny" type="primary" @click="$emit('copyText')">
           复制
         </NButton>
