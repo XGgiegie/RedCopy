@@ -1,4 +1,5 @@
 import { injectExtractNote } from '../shared/extract-note'
+import { logExtractContentJson } from '../shared/extract-log'
 import {
   EXTRACT_NOTE_MESSAGE,
   STORAGE_GET_MESSAGE,
@@ -99,6 +100,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         } satisfies ExtractNoteResponse)
         return
       }
+      logExtractContentJson(result.result, '[RedCopy][后台]')
       sendResponse({
         ok: true,
         data: result.result,

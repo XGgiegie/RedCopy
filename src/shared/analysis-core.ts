@@ -1,5 +1,6 @@
 import type { AiAnalysisResult } from './ai-types'
 import type { NoteTextInfo } from './note-types'
+import { parseLlmJsonObject } from './parse-llm-json'
 
 export const ANALYSIS_SYSTEM_PROMPT = `你是资深小红书爆款内容教练，擅长拆解爆款笔记，并教会用户「借鉴它，做出自己的爆款」。
 
@@ -68,40 +69,31 @@ export function buildAnalysisUserPrompt(payload: AnalyzeNotePayload): string {
 
 export function parseAnalysisContent(content: string): AiAnalysisResult {
   const trimmed = content.trim()
+  const parsed = parseLlmJsonObject(trimmed)
 
-  try {
-    const jsonText = trimmed
-      .replace(/^```json\s*/i, '')
-      .replace(/^```\s*/i, '')
-      .replace(/\s*```$/i, '')
-    const parsed = JSON.parse(jsonText) as Record<string, unknown>
-
-    if (typeof parsed.summary === 'string' && parsed.summary) {
-      return {
-        summary: parsed.summary,
-        titleAnalysis:
-          typeof parsed.titleAnalysis === 'string'
-            ? parsed.titleAnalysis
-            : undefined,
-        contentStructure: Array.isArray(parsed.contentStructure)
-          ? parsed.contentStructure.map(String)
+  if (parsed && typeof parsed.summary === 'string' && parsed.summary) {
+    return {
+      summary: parsed.summary,
+      titleAnalysis:
+        typeof parsed.titleAnalysis === 'string'
+          ? parsed.titleAnalysis
           : undefined,
-        engagementInsight:
-          typeof parsed.engagementInsight === 'string'
-            ? parsed.engagementInsight
-            : undefined,
-        rewriteSuggestions: Array.isArray(parsed.rewriteSuggestions)
-          ? parsed.rewriteSuggestions.map(String)
+      contentStructure: Array.isArray(parsed.contentStructure)
+        ? parsed.contentStructure.map(String)
+        : undefined,
+      engagementInsight:
+        typeof parsed.engagementInsight === 'string'
+          ? parsed.engagementInsight
           : undefined,
-        score:
-          typeof parsed.score === 'number'
-            ? Math.round(parsed.score)
-            : undefined,
-        raw: trimmed,
-      }
+      rewriteSuggestions: Array.isArray(parsed.rewriteSuggestions)
+        ? parsed.rewriteSuggestions.map(String)
+        : undefined,
+      score:
+        typeof parsed.score === 'number'
+          ? Math.round(parsed.score)
+          : undefined,
+      raw: trimmed,
     }
-  } catch {
-    // 非 JSON 时走纯文本兜底
   }
 
   return {

@@ -4,7 +4,7 @@ import { CONTACT_GROUP, CONTACT_QQ } from '../../shared/brand'
 
 const FEEDBACK_TIP = `交流反馈\nQQ：${CONTACT_QQ}\n群：${CONTACT_GROUP}`
 const FLOW_TIP =
-  '提取 → 进入记录 → AI 分析 → 生成类似笔记。分析模型在详情页切换。'
+  '提取 → 进入任务 → AI 分析 → 生成类似笔记。模型在任务详情页切换。'
 </script>
 
 <template>

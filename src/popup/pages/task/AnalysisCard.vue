@@ -5,17 +5,11 @@ import type { AiAnalysisResult } from '../../../shared/ai-types'
 
 defineProps<{
   analysis: AiAnalysisResult
-  showGenerate?: boolean
-  isGenerating?: boolean
-  isGenerateReady?: boolean
-  isAnalyzing?: boolean
-  hasDraft?: boolean
 }>()
 
 defineEmits<{
   copyText: []
   copyMarkdown: []
-  generateSimilar: []
 }>()
 </script>
 
@@ -70,41 +64,5 @@ defineEmits<{
         </li>
       </ul>
     </div>
-
-    <div v-if="showGenerate" class="generate-footer">
-      <NButton
-        block
-        class="generate-similar-btn"
-        :loading="isGenerating"
-        :disabled="!isGenerateReady || isAnalyzing"
-        @click="$emit('generateSimilar')"
-      >
-        {{ hasDraft ? '重新基于当前分析生成类似笔记' : '基于当前分析生成类似笔记' }}
-      </NButton>
-    </div>
   </div>
 </template>
-
-<style scoped>
-.generate-footer {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid #eef0f4;
-}
-
-.generate-similar-btn {
-  background: linear-gradient(135deg, #ff2442 0%, #ff6b81 100%) !important;
-  color: #fff !important;
-  border: none !important;
-  font-weight: 600;
-  height: 38px;
-}
-
-.generate-similar-btn:hover:not(:disabled) {
-  opacity: 0.92;
-}
-
-.generate-similar-btn:disabled {
-  opacity: 0.55;
-}
-</style>

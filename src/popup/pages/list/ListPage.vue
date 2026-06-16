@@ -1,20 +1,35 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { NButton, NTooltip, useMessage } from 'naive-ui'
+import { NButton, NText, NTooltip, useMessage } from 'naive-ui'
 import { isXhsNoteUrl } from '../../../shared/extract-note'
 import { type Task, createTask, deleteTask, listTasks } from '../../../shared/task-db'
+import { formatAllTasksAsMarkdown } from '../../../shared/export-markdown'
+import { logExtractContentJson } from '../../../shared/extract-log'
+import { downloadTextFile } from '../../../shared/note-media'
 import { extractNoteFromTab } from '../../services/extract-note'
+import { useTaskOperationsStore } from '../../stores/task-operations'
 import PageStatusBar from './PageStatusBar.vue'
 import TaskListCard from './TaskListCard.vue'
 
 const router = useRouter()
 const message = useMessage()
+const taskOps = useTaskOperationsStore()
 
 const tasks = ref<Task[]>([])
 const isXhsPage = ref(false)
 const isNotePage = ref(false)
 const isExtracting = ref(false)
+const isExporting = ref(false)
+
+const busyHint = computed(() => {
+  const analyzing = taskOps.analyzingIds.size
+  const generating = taskOps.generatingIds.size
+  const parts: string[] = []
+  if (analyzing > 0) parts.push(`${analyzing} 个任务 AI 分析中`)
+  if (generating > 0) parts.push(`${generating} 个任务生成中`)
+  return parts.length > 0 ? parts.join('，') : ''
+})
 
 let watchingTabId: number | undefined
 
@@ -78,8 +93,9 @@ async function handleExtract() {
 
   isExtracting.value = true
   try {
-    console.info('[RedCopy] 开始提取', { tabId: tab.id })
+    console.log('[RedCopy] 开始提取', { tabId: tab.id })
     const extract = await extractNoteFromTab(tab.id, { includeDom: false })
+    logExtractContentJson(extract, '[RedCopy][侧栏]')
 
     if (!extract.ok) {
       console.warn('[RedCopy] 提取未成功', { error: extract.error })
@@ -110,6 +126,33 @@ async function handleExtract() {
   }
 }
 
+// ── 一键导出全部笔记（Markdown 文件下载） ───────────────────
+
+async function handleExportAll() {
+  if (tasks.value.length === 0) {
+    message.warning('暂无可导出的笔记')
+    return
+  }
+
+  isExporting.value = true
+  try {
+    const markdown = formatAllTasksAsMarkdown(tasks.value)
+    const stamp = new Date()
+      .toLocaleString('zh-CN', { hour12: false })
+      .replace(/[/:]/g, '-')
+      .replace(/\s+/g, '_')
+    await downloadTextFile(markdown, `全部笔记-${stamp}.md`)
+    message.success(`已导出 ${tasks.value.length} 条笔记`)
+    console.info('[RedCopy] 全部笔记已导出', { count: tasks.value.length })
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    console.error('[RedCopy] 导出全部笔记失败', detail, error)
+    message.error(`导出失败：${detail}`)
+  } finally {
+    isExporting.value = false
+  }
+}
+
 function openTask(id: string) {
   void router.push({ name: 'task', params: { id } })
 }
@@ -136,6 +179,24 @@ onMounted(() => {
   })
 })
 
+// 后台分析/生成结束后刷新列表，更新进度条
+watch(
+  () => taskOps.busyCount,
+  (count, prevCount) => {
+    if (prevCount !== undefined && count < prevCount) {
+      void refreshTasks()
+    }
+  },
+)
+
+// 从任务页返回时同步最新数据
+watch(
+  () => router.currentRoute.value.name,
+  (name) => {
+    if (name === 'list') void refreshTasks()
+  },
+)
+
 onUnmounted(() => {
   chrome.tabs.onActivated.removeListener(onTabActivated)
   chrome.tabs.onUpdated.removeListener(onTabUpdated)
@@ -146,6 +207,10 @@ onUnmounted(() => {
 <template>
   <div class="list-page">
     <PageStatusBar :is-xhs-page="isXhsPage" :is-note-page="isNotePage" />
+
+    <div v-if="busyHint" class="busy-hint" role="status" aria-live="polite">
+      <NText depth="3" class="busy-hint-text">{{ busyHint }}</NText>
+    </div>
 
     <NTooltip trigger="hover" :disabled="isNotePage">
       <template #trigger>
@@ -164,6 +229,18 @@ onUnmounted(() => {
       {{ isNotePage ? '提取当前笔记到任务列表' : '请先打开小红书笔记详情页' }}
     </NTooltip>
 
+    <NButton
+      v-if="tasks.length > 0"
+      secondary
+      block
+      size="small"
+      class="export-all-btn"
+      :loading="isExporting"
+      @click="handleExportAll"
+    >
+      一键导出全部笔记（Markdown）
+    </NButton>
+
     <TaskListCard class="task-section" :tasks="tasks" @open="openTask" @delete="handleDelete" />
   </div>
 </template>
@@ -180,6 +257,22 @@ onUnmounted(() => {
 .extract-btn {
   font-weight: 600;
   height: 40px;
+}
+
+.export-all-btn {
+  font-weight: 500;
+}
+
+.busy-hint {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fff1f0;
+  border: 1px solid #ffccc7;
+}
+
+.busy-hint-text {
+  font-size: 12px;
+  color: #ff2442;
 }
 
 .task-section {

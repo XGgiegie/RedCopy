@@ -32,13 +32,13 @@ export default defineManifest({
     'scripting',
     'sidePanel',
     'storage',
+    'unlimitedStorage',
     'tabs',
     'webNavigation',
   ],
   host_permissions: [
     '*://*.xiaohongshu.com/*',
     '*://*.xhscdn.com/*',
-    'https://api.deepseek.com/*',
     'https://ark.cn-beijing.volces.com/*',
   ],
 })

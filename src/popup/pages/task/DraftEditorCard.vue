@@ -1,14 +1,27 @@
 <script setup lang="ts">
 import '../../styles/content-card.css'
 import { NButton, NDynamicTags, NInput, NSpace, NText } from 'naive-ui'
-import type { GeneratedNoteDraft } from '../../../shared/ai-types'
+import type {
+  GeneratedImageRecord,
+  GeneratedNoteDraft,
+} from '../../../shared/ai-types'
+import DraftImagePromptList from './DraftImagePromptList.vue'
+import DraftImageHistory from './DraftImageHistory.vue'
 
 const draft = defineModel<GeneratedNoteDraft>('draft', { required: true })
+
+defineProps<{
+  taskId: string
+  isGenerateReady: boolean
+  imageHistory: GeneratedImageRecord[]
+}>()
 
 defineEmits<{
   copyText: []
   copyMarkdown: []
   edit: []
+  generated: [record: GeneratedImageRecord]
+  deleteImage: [recordId: string]
 }>()
 </script>
 
@@ -57,13 +70,19 @@ defineEmits<{
     </div>
 
     <div class="content-block">
-      <NText depth="3" class="content-label">配图建议</NText>
-      <NInput
-        v-model:value="draft.imageTips"
-        type="textarea"
-        placeholder="配图张数、封面与风格建议（选填）"
-        :autosize="{ minRows: 2, maxRows: 8 }"
-        @update:value="$emit('edit')"
+      <DraftImagePromptList
+        v-model:image-prompts="draft.imagePrompts"
+        :task-id="taskId"
+        :is-generate-ready="isGenerateReady"
+        :image-history="imageHistory"
+        @edit="$emit('edit')"
+        @generated="(record) => $emit('generated', record)"
+        @delete-image="(id) => $emit('deleteImage', id)"
+      />
+
+      <DraftImageHistory
+        :records="imageHistory"
+        @delete-image="(id) => $emit('deleteImage', id)"
       />
     </div>
   </div>

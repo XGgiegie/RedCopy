@@ -72,6 +72,24 @@ function downloadByUrl(url: string, filename: string): Promise<number> {
   })
 }
 
+/** 通用：按 URL（含 data:）下载图片，filename 为不含目录的文件名 */
+export async function downloadImageByUrl(
+  url: string,
+  filename: string,
+): Promise<void> {
+  await downloadByUrl(url, `薯薯小抄/配图/${sanitizeFilename(filename)}`)
+}
+
+/** 通用：把文本内容（如 Markdown）保存到本地下载 */
+export async function downloadTextFile(
+  content: string,
+  filename: string,
+  mime = 'text/markdown',
+): Promise<void> {
+  const url = `data:${mime};charset=utf-8,${encodeURIComponent(content)}`
+  await downloadByUrl(url, `薯薯小抄/${sanitizeFilename(filename)}`)
+}
+
 /** 下载单张笔记图片 */
 export async function downloadNoteImage(
   url: string,

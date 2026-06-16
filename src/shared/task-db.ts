@@ -1,4 +1,8 @@
-import type { AiAnalysisResult, GeneratedNoteDraft } from './ai-types'
+import type {
+  AiAnalysisResult,
+  GeneratedImageRecord,
+  GeneratedNoteDraft,
+} from './ai-types'
 import { loadLastAnalysis } from './analysis-storage'
 import { loadLastDraft } from './draft-storage'
 import { loadLastExtract } from './extract-storage'
@@ -29,6 +33,8 @@ export interface Task {
   draft: GeneratedNoteDraft | null
   generatedAt: number | null
   generateTopic: string
+  /** AI 配图生成历史（生成即落库，持久保留） */
+  imageHistory: GeneratedImageRecord[]
 }
 
 /** 新建任务时由调用方提供的字段 */
@@ -43,6 +49,7 @@ export type TaskPatch = Partial<
     | 'draft'
     | 'generatedAt'
     | 'generateTopic'
+    | 'imageHistory'
     | 'note'
     | 'noteType'
   >
@@ -50,6 +57,14 @@ export type TaskPatch = Partial<
 
 function createTaskId(): string {
   return `t-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+}
+
+/** 补齐历史数据缺失的字段，保证读取到的任务结构完整 */
+function normalizeTask(task: Task): Task {
+  return {
+    ...task,
+    imageHistory: Array.isArray(task.imageHistory) ? task.imageHistory : [],
+  }
 }
 
 function sortByExtractedAt(tasks: Task[]): Task[] {
@@ -76,6 +91,7 @@ async function buildTaskFromLegacyCaches(): Promise<Task[]> {
     draft: draft?.draft ?? null,
     generatedAt: draft?.generatedAt ?? null,
     generateTopic: '',
+    imageHistory: [],
   }
   return [task]
 }
@@ -86,14 +102,14 @@ async function buildTaskFromLegacyCaches(): Promise<Task[]> {
  */
 async function readAll(): Promise<Task[]> {
   const current = await storageGet<Task[]>(TASK_DB_KEY)
-  if (current !== undefined) return current
+  if (current !== undefined) return current.map(normalizeTask)
 
   // 迁移 1：旧版历史数组（结构兼容，字段一致）
   const legacy = await storageGet<Task[]>(LEGACY_HISTORY_KEY)
   if (legacy && legacy.length > 0) {
     await storageSet(TASK_DB_KEY, legacy)
     console.info('[RedCopy] 已从旧历史迁移任务表', { count: legacy.length })
-    return legacy
+    return legacy.map(normalizeTask)
   }
 
   // 迁移 2：更早的单条缓存
@@ -102,7 +118,7 @@ async function readAll(): Promise<Task[]> {
   if (fromCaches.length > 0) {
     console.info('[RedCopy] 已从旧单条缓存迁移任务表')
   }
-  return fromCaches
+  return fromCaches.map(normalizeTask)
 }
 
 async function writeAll(tasks: Task[]): Promise<void> {
@@ -132,6 +148,7 @@ export async function createTask(input: NewTaskInput): Promise<Task> {
     draft: null,
     generatedAt: null,
     generateTopic: '',
+    imageHistory: [],
   }
   const next = sortByExtractedAt([task, ...tasks]).slice(0, MAX_TASKS)
   await writeAll(next)

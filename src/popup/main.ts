@@ -1,4 +1,5 @@
 import { createApp, h } from 'vue'
+import { createPinia } from 'pinia'
 import {
   NConfigProvider,
   NGlobalStyle,
@@ -30,5 +31,6 @@ const app = createApp({
     ),
 })
 
+app.use(createPinia())
 app.use(router)
 app.mount('#app')

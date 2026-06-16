@@ -1,7 +1,7 @@
-import type OpenAI from 'openai'
 import type { AiAnalysisResult, GeneratedNoteDraft } from './ai-types'
-import type { DeepSeekModel } from './ai-settings'
-import { createDeepSeekClient } from './deepseek-client'
+import type { AiSettings } from './ai-settings'
+import { requestDoubaoResponses } from './doubao-api'
+import { parseGeneratedDraft } from './parse-generated-draft'
 import type { NoteTextInfo } from './note-types'
 
 const GENERATE_SYSTEM_PROMPT = `你是资深小红书爆款内容创作者。
@@ -15,14 +15,17 @@ const GENERATE_SYSTEM_PROMPT = `你是资深小红书爆款内容创作者。
 4. 标题要有小红书爆款感：具体、有情绪、有信息差或收藏价值
 5. 正文保留口语感与自然换行，适合手机阅读，结尾可有轻互动引导
 6. 标签 5-8 个，贴合内容且利于搜索分发
-7. 配图建议要具体可执行
+7. imagePrompts：按笔记发布顺序输出 3-9 条配图，每条 prompt 必须是可直接用于 AI 文生图的完整中文提示词（含画面主体、构图、色调、风格、文字排版、氛围等），第一条一般为封面，不要用「建议」口吻，直接写可生成的画面描述
 
 只输出 JSON，不要 markdown 代码块：
 {
   "title": "可直接发布的标题",
   "body": "可直接发布的正文",
   "tags": ["标签1", "标签2"],
-  "imageTips": "配图张数、封面与内页风格建议"
+  "imagePrompts": [
+    { "label": "封面", "prompt": "完整文生图提示词，可直接生成封面图" },
+    { "label": "内页1", "prompt": "完整文生图提示词" }
+  ]
 }`
 
 export interface GenerateNotePayload {
@@ -32,14 +35,6 @@ export interface GenerateNotePayload {
   analysis?: AiAnalysisResult | null
   /** 用户想推广/售卖的主题或卖点，可为空 */
   topic?: string
-}
-
-interface DeepSeekCompletionParams {
-  model: DeepSeekModel
-  messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[]
-  stream: false
-  thinking?: { type: 'enabled' }
-  reasoning_effort?: 'high'
 }
 
 function buildGenerateUserPrompt(payload: GenerateNotePayload): string {
@@ -62,11 +57,7 @@ function buildGenerateUserPrompt(payload: GenerateNotePayload): string {
   }
 
   if (analysis) {
-    lines.push(
-      '',
-      '--- AI 分析参考 ---',
-      `总结：${analysis.summary}`,
-    )
+    lines.push('', '--- AI 分析参考 ---', `总结：${analysis.summary}`)
     if (analysis.titleAnalysis) {
       lines.push(`标题分析：${analysis.titleAnalysis}`)
     }
@@ -87,84 +78,26 @@ function buildGenerateUserPrompt(payload: GenerateNotePayload): string {
   return lines.join('\n')
 }
 
-function parseGeneratedDraft(content: string): GeneratedNoteDraft {
-  const trimmed = content.trim()
-
-  try {
-    const jsonText = trimmed
-      .replace(/^```json\s*/i, '')
-      .replace(/^```\s*/i, '')
-      .replace(/\s*```$/i, '')
-    const parsed = JSON.parse(jsonText) as Record<string, unknown>
-
-    if (typeof parsed.title === 'string' && typeof parsed.body === 'string') {
-      return {
-        title: parsed.title.trim(),
-        body: parsed.body.trim(),
-        tags: Array.isArray(parsed.tags) ? parsed.tags.map(String) : [],
-        imageTips:
-          typeof parsed.imageTips === 'string' ? parsed.imageTips : undefined,
-        raw: trimmed,
-      }
-    }
-  } catch {
-    // 非 JSON 时走纯文本兜底
-  }
-
-  return {
-    title: '（生成结果）',
-    body: trimmed,
-    tags: [],
-    raw: trimmed,
-  }
-}
-
-function buildCompletionParams(
-  model: DeepSeekModel,
-  userPrompt: string,
-): DeepSeekCompletionParams {
-  const base: DeepSeekCompletionParams = {
-    model,
-    stream: false,
-    messages: [
-      { role: 'system', content: GENERATE_SYSTEM_PROMPT },
-      { role: 'user', content: userPrompt },
-    ],
-  }
-
-  if (model === 'deepseek-v4-pro') {
-    base.thinking = { type: 'enabled' }
-    base.reasoning_effort = 'high'
-  }
-
-  return base
-}
-
-/** 生成类似笔记草稿 */
-export async function requestDeepSeekGenerate(
+/** 使用火山方舟 Responses API 生成类似笔记草稿 */
+export async function requestDoubaoGenerate(
   payload: GenerateNotePayload,
+  settings?: AiSettings,
 ): Promise<GeneratedNoteDraft> {
-  const { client, settings } = await createDeepSeekClient()
   const userPrompt = buildGenerateUserPrompt(payload)
-  const params = buildCompletionParams(settings.deepseek.model, userPrompt)
 
-  console.info('[RedCopy] 请求 DeepSeek 生成爆款笔记', {
-    model: settings.deepseek.model,
+  console.info('[RedCopy] 请求豆包生成类似笔记', {
     noteId: payload.noteId,
     hasAnalysis: Boolean(payload.analysis),
   })
 
-  const completion = await client.chat.completions.create(
-    params as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
+  const content = await requestDoubaoResponses(
+    GENERATE_SYSTEM_PROMPT,
+    userPrompt,
+    { settings, logLabel: '生成类似笔记' },
   )
 
-  const content = completion.choices[0]?.message?.content?.trim()
-  if (!content) {
-    throw new Error('DeepSeek 未返回生成内容')
-  }
-
   const draft = parseGeneratedDraft(content)
-  console.info('[RedCopy] 爆款笔记生成完成', {
+  console.info('[RedCopy] 类似笔记生成完成', {
     titleLength: draft.title.length,
     bodyLength: draft.body.length,
     tags: draft.tags.length,

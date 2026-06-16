@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { NButton, NCheckbox, NText } from 'naive-ui'
+import { NButton, NCheckbox, NImage, NText } from 'naive-ui'
 
 const props = defineProps<{
   images: string[]
@@ -54,7 +54,6 @@ function goNext() {
       <NText depth="3" class="gallery-toolbar-label">
         笔记图片 · {{ totalCount }} 张
         <span v-if="enableImageSelection" class="vision-hint">· 勾选参与 AI 识图</span>
-        <span v-else class="vision-hint vision-hint--muted">· 识图请切换「豆包图文」</span>
       </NText>
       <div class="gallery-toolbar-actions">
         <template v-if="enableImageSelection">
@@ -97,12 +96,15 @@ function goNext() {
             enableImageSelection && isImageSelected(currentIndex),
         }"
       >
-        <img
+        <NImage
           v-if="currentImage"
           :src="currentImage"
-          :alt="`笔记图片 ${currentIndex + 1}`"
+          object-fit="contain"
           class="gallery-main-image"
-          decoding="async"
+          :img-props="{
+            alt: `笔记图片 ${currentIndex + 1}`,
+            decoding: 'async',
+          }"
         />
 
         <label
@@ -255,10 +257,17 @@ function goNext() {
 }
 
 .gallery-main-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.gallery-main-image :deep(img) {
   width: 100%;
   height: 100%;
   object-fit: contain;
   display: block;
+  cursor: zoom-in;
 }
 
 .gallery-check {

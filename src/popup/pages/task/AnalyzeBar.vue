@@ -1,119 +1,117 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { NButton, NSelect, NText, NTooltip } from 'naive-ui'
-import type {
-  AnalysisProvider,
-  DeepSeekModel,
-  DoubaoModel,
-} from '../../../shared/ai-settings'
-import {
-  ANALYSIS_PROVIDER_OPTIONS,
-  DEEPSEEK_MODEL_OPTIONS,
-  DOUBAO_MODEL_OPTIONS,
-  getAnalysisProviderDescription,
-} from '../../../shared/ai-settings'
+import type { DoubaoModel } from '../../../shared/ai-settings'
+import { DOUBAO_MODEL_OPTIONS } from '../../../shared/ai-settings'
+import type { ContentView } from '../../types/content-view'
 import InfoTip from '../../components/InfoTip.vue'
 
 const props = defineProps<{
+  contentView: ContentView
   hasNote: boolean
+  hasAnalysis: boolean
+  hasDraft: boolean
   isAnalyzing: boolean
   isGenerating: boolean
   isAiConfigured: boolean
-  hasAnalysis: boolean
-  analysisProvider: AnalysisProvider
-  analysisModel: DeepSeekModel | DoubaoModel
-  hasDeepseekKey: boolean
-  hasDoubaoKey: boolean
-  analysisProviderLabel: string
+  isGenerateReady: boolean
+  model: DoubaoModel
 }>()
 
 const emit = defineEmits<{
   analyze: []
-  'update:analysisProvider': [value: AnalysisProvider]
-  'update:analysisModel': [value: DeepSeekModel | DoubaoModel]
+  generate: []
+  'update:model': [value: DoubaoModel]
   openSettings: []
 }>()
 
-const providerSelectOptions = computed(() =>
-  ANALYSIS_PROVIDER_OPTIONS.map((item) => {
-    const configured =
-      item.value === 'deepseek' ? props.hasDeepseekKey : props.hasDoubaoKey
-    return {
-      label: configured ? item.label : `${item.label}（未配置）`,
-      value: item.value,
-    }
-  }),
+const modelSelectOptions = computed(() =>
+  DOUBAO_MODEL_OPTIONS.map((item) => ({ label: item.label, value: item.value })),
 )
 
-const modelSelectOptions = computed(() => {
-  const source =
-    props.analysisProvider === 'doubao' ? DOUBAO_MODEL_OPTIONS : DEEPSEEK_MODEL_OPTIONS
-  return source.map((item) => ({ label: item.label, value: item.value }))
-})
+const selectedModelDescription = computed(
+  () => DOUBAO_MODEL_OPTIONS.find((item) => item.value === props.model)?.description ?? '',
+)
 
-const selectedModelDescription = computed(() => {
-  const source =
-    props.analysisProvider === 'doubao' ? DOUBAO_MODEL_OPTIONS : DEEPSEEK_MODEL_OPTIONS
-  return source.find((item) => item.value === props.analysisModel)?.description ?? ''
-})
+const MODEL_TIP =
+  '豆包大模型均支持配图识图，请在笔记预览中勾选图片参与分析。分析与生成功能共用同一 ARK Key。'
 
-const providerCapabilityTip = computed(() => {
-  if (props.analysisProvider === 'deepseek') {
-    return 'DeepSeek 仅分析笔记文案，不识别配图；生成类似笔记也使用 DeepSeek。'
+const showPrimaryAction = computed(
+  () => props.contentView === 'note' || props.contentView === 'analysis',
+)
+
+const primaryMode = computed<'analyze' | 'generate'>(() =>
+  props.contentView === 'analysis' ? 'generate' : 'analyze',
+)
+
+const primaryLabel = computed(() => {
+  if (primaryMode.value === 'generate') {
+    return props.hasDraft ? '重新生成类似笔记' : '生成类似笔记'
   }
-  return '豆包支持配图识图，请在笔记预览中勾选图片。切换服务商即可更换分析能力。'
+  return props.hasAnalysis ? '重新分析笔记' : 'AI 分析笔记'
 })
 
-const currentProviderDesc = computed(() =>
-  getAnalysisProviderDescription(props.analysisProvider),
+const primaryLoading = computed(() =>
+  primaryMode.value === 'generate' ? props.isGenerating : props.isAnalyzing,
 )
 
-const analyzeDisabledReason = computed(() => {
+const primaryDisabledReason = computed(() => {
+  if (primaryMode.value === 'generate') {
+    if (!props.hasAnalysis) return '请先完成 AI 分析'
+    if (props.isAnalyzing) return '正在分析中'
+    if (!props.isGenerateReady) return '请先配置火山方舟 ARK API Key'
+    return ''
+  }
   if (!props.hasNote) return '当前任务无笔记内容'
   if (props.isGenerating) return '正在生成类似笔记'
-  if (!props.isAiConfigured) return `请先配置${props.analysisProviderLabel} API Key`
+  if (!props.isAiConfigured) return '请先配置火山方舟 ARK API Key'
   return ''
 })
 
-const apiKeyTooltip = computed(
-  () => `「${props.analysisProviderLabel}」未配置 API Key，点击前往设置`,
-)
+const primaryDisabled = computed(() => {
+  if (primaryLoading.value) return false
+  if (primaryMode.value === 'generate') {
+    return !props.isGenerateReady || !props.hasAnalysis || props.isAnalyzing
+  }
+  return !props.isAiConfigured || !props.hasNote || props.isGenerating
+})
+
+function handlePrimaryClick() {
+  if (primaryMode.value === 'generate') {
+    emit('generate')
+    return
+  }
+  emit('analyze')
+}
 </script>
 
 <template>
   <div class="analyze-bar">
     <div class="model-row">
       <NSelect
-        :value="analysisProvider"
-        :options="providerSelectOptions"
-        size="small"
-        class="provider-select"
-        @update:value="emit('update:analysisProvider', $event)"
-      />
-      <NSelect
-        :value="analysisModel"
+        :value="model"
         :options="modelSelectOptions"
         size="small"
         class="model-select"
-        @update:value="emit('update:analysisModel', $event)"
+        @update:value="emit('update:model', $event)"
       />
-      <InfoTip :content="providerCapabilityTip" placement="bottom" />
+      <InfoTip :content="MODEL_TIP" placement="bottom" />
     </div>
 
-    <div class="analyze-row">
+    <div v-if="showPrimaryAction" class="analyze-row">
       <NButton
-        class="analyze-btn"
+        class="primary-btn"
         type="primary"
         block
-        :loading="isAnalyzing"
-        :disabled="!isAiConfigured || !hasNote || isGenerating"
-        :title="analyzeDisabledReason || undefined"
-        @click="emit('analyze')"
+        :loading="primaryLoading"
+        :disabled="primaryDisabled"
+        :title="primaryDisabledReason || undefined"
+        @click="handlePrimaryClick"
       >
-        {{ hasAnalysis ? '重新分析' : 'AI 分析' }}
+        {{ primaryLabel }}
       </NButton>
 
-      <NTooltip v-if="!isAiConfigured" trigger="hover">
+      <NTooltip v-if="!isAiConfigured && !isGenerateReady" trigger="hover">
         <template #trigger>
           <button
             type="button"
@@ -126,14 +124,12 @@ const apiKeyTooltip = computed(
             </svg>
           </button>
         </template>
-        {{ apiKeyTooltip }}
+        未配置火山方舟 ARK API Key，点击前往设置
       </NTooltip>
     </div>
 
-    <NText depth="3" class="provider-desc">
-      {{ currentProviderDesc }}
-      <template v-if="selectedModelDescription"> · {{ selectedModelDescription }}</template>
-      <template v-if="analysisProvider === 'deepseek'"> · 生成类似笔记同用 DeepSeek</template>
+    <NText v-if="selectedModelDescription" depth="3" class="model-desc">
+      {{ selectedModelDescription }} · 支持图文识图
     </NText>
   </div>
 </template>
@@ -146,15 +142,13 @@ const apiKeyTooltip = computed(
 }
 
 .model-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) auto;
-  gap: 6px;
+  display: flex;
   align-items: center;
+  gap: 6px;
 }
 
-.provider-select,
 .model-select {
-  width: 100%;
+  flex: 1;
   min-width: 0;
 }
 
@@ -164,14 +158,14 @@ const apiKeyTooltip = computed(
   gap: 8px;
 }
 
-.analyze-btn {
+.primary-btn {
   flex: 1;
   min-width: 0;
   font-weight: 600;
   height: 36px;
 }
 
-.provider-desc {
+.model-desc {
   font-size: 11px;
   line-height: 1.4;
 }

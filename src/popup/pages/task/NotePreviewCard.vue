@@ -33,7 +33,7 @@ defineEmits<{
     <NSpace align="center" justify="space-between" class="content-card-header">
       <NSpace :size="6">
         <NTag type="primary" size="small" round :bordered="false">
-          👤 {{ note.author || '未知作者' }}
+          {{ note.author || '未知作者' }}
         </NTag>
         <NTag
           v-if="noteType === 'video'"

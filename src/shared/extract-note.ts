@@ -290,16 +290,35 @@ export function injectExtractNote(
   try {
     const fromState = extractFromInitialState()
     const fromDom = extractFromDom()
+    const hasState = fromState.structured != null
 
-    const text: NoteTextInfo = {
-      ...emptyText,
-      ...fromDom,
-      ...Object.fromEntries(
-        Object.entries(fromState.partial).filter(([, v]) => {
-          if (Array.isArray(v)) return v.length > 0
-          return typeof v === 'string' && v.length > 0
-        }),
-      ) as Partial<NoteTextInfo>,
+    // 合并策略：
+    // - 命中 __INITIAL_STATE__（按当前 URL 的笔记 ID 精确定位）时，结构化数据是
+    //   当前笔记的权威来源。文案字段（标题/正文/作者/标签等）一律以 state 为准，
+    //   即便为空也不再回退 DOM——否则小红书 SPA 复用 DOM 时，上一篇笔记残留的
+    //   标题/正文会污染当前（尤其是无标题）笔记。
+    // - 未命中 state 时，才整体回退到 DOM 提取结果。
+    const text: NoteTextInfo = hasState
+      ? {
+          ...emptyText,
+          ...fromDom,
+          ...fromState.partial,
+        }
+      : {
+          ...emptyText,
+          ...fromDom,
+        }
+
+    // state 未提供或为空的字段，用 DOM 兜底
+    if (hasState) {
+      // 图片：state 无图（如视频/异常）时才用 DOM 轮播兜底
+      if (!text.images?.length && fromDom.images?.length) {
+        text.images = fromDom.images
+      }
+      // 全文：state 不含 allText，沿用 DOM 根节点文本
+      if (!text.allText && fromDom.allText) {
+        text.allText = fromDom.allText
+      }
     }
 
     if (!text.allText && (text.title || text.desc)) {
@@ -318,7 +337,6 @@ export function injectExtractNote(
       : null
 
     const noteType = detectNoteType(fromState.structured)
-    const hasState = fromState.structured != null
     const hasDom = Boolean(text.title || text.desc || text.allText)
 
     console.info('[RedCopy] 笔记提取完成', {
@@ -333,9 +351,45 @@ export function injectExtractNote(
       || hasDom
       || Boolean(text.title || text.desc || text.allText)
 
+  function logContentJson(payload: {
+    ok: boolean
+    noteId: string | null
+    url: string
+    noteType: NoteMediaType
+    source: NoteExtractResult['source']
+    text: NoteTextInfo
+    structured: Record<string, unknown> | null
+    error?: string
+  }) {
+    // 在笔记页 MAIN 世界打印，开发者工具选「当前小红书标签页」即可看到
+    console.log('[RedCopy] 提取内容 JSON', payload)
+    try {
+      console.log(
+        '[RedCopy] 提取内容 JSON（可复制）\n' + JSON.stringify(payload, null, 2),
+      )
+    } catch {
+      console.log('[RedCopy] 提取内容 JSON（可复制，序列化受限）', payload)
+    }
+  }
+
+  function emitResult(result: NoteExtractResult): NoteExtractResult {
+    logContentJson({
+      ok: result.ok,
+      noteId: result.noteId,
+      url: result.url,
+      noteType: result.noteType,
+      source: result.source,
+      text: result.text,
+      // 调试时始终带上 structured，不受 includeDom 开关影响
+      structured: fromState.structured,
+      ...(result.error ? { error: result.error } : {}),
+    })
+    return result
+  }
+
     // 视频笔记不支持图片轮播解析，但标题/正文/标签等文案仍可提取用于 AI 分析
     if (noteType === 'video') {
-      return {
+      return emitResult({
         ok: hasContent,
         url,
         noteId: fromState.noteId,
@@ -350,10 +404,10 @@ export function injectExtractNote(
         ...(hasContent
           ? {}
           : { error: '未能提取视频笔记文案，请确认页面已加载完成' }),
-      }
+      })
     }
 
-    return {
+    return emitResult({
       ok: hasContent,
       url,
       noteId: fromState.noteId,
@@ -368,11 +422,11 @@ export function injectExtractNote(
       ...(hasContent
         ? {}
         : { error: isNotePage ? '未找到笔记数据' : '当前不是笔记详情页' }),
-    }
+    })
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error)
     console.error('[RedCopy] 笔记提取失败', msg)
-    return {
+    const failed: NoteExtractResult = {
       ok: false,
       url,
       noteId: null,
@@ -384,5 +438,12 @@ export function injectExtractNote(
       dom: null,
       error: msg,
     }
+    console.log('[RedCopy] 提取内容 JSON', {
+      ok: false,
+      url,
+      error: msg,
+      text: emptyText,
+    })
+    return failed
   }
 }

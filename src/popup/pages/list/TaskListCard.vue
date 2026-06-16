@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { NPopconfirm, NText } from 'naive-ui'
+import { NPopconfirm, NSpin, NText } from 'naive-ui'
 import { type Task, formatTaskTime } from '../../../shared/task-db'
+import { useTaskOperationsStore } from '../../stores/task-operations'
 
 defineProps<{
   tasks: Task[]
@@ -10,6 +11,8 @@ const emit = defineEmits<{
   open: [id: string]
   delete: [id: string]
 }>()
+
+const taskOps = useTaskOperationsStore()
 </script>
 
 <template>
@@ -24,12 +27,18 @@ const emit = defineEmits<{
       <NText depth="3" class="task-empty-text">提取后显示在这里</NText>
     </div>
 
-    <div v-for="task in tasks" :key="task.id" class="task-item">
+    <div v-for="task in tasks" :key="task.id" class="task-item" :class="{ 'task-item--busy': taskOps.isBusy(task.id) }">
       <button type="button" class="task-item-main" @click="emit('open', task.id)">
         <div class="task-item-content">
-          <NText strong class="task-item-title">
-            {{ task.note.title || '（无标题）' }}
-          </NText>
+          <div class="task-item-title-row">
+            <NText strong class="task-item-title">
+              {{ task.note.title || '（无标题）' }}
+            </NText>
+            <span v-if="taskOps.getStatusLabel(task.id)" class="task-status-badge">
+              <NSpin size="small" class="task-status-spin" />
+              {{ taskOps.getStatusLabel(task.id) }}
+            </span>
+          </div>
           <div class="task-item-meta">
             <span>{{ task.note.author || '未知作者' }}</span>
             <span class="meta-dot" aria-hidden="true">·</span>
@@ -41,18 +50,24 @@ const emit = defineEmits<{
             <span class="pipe-line" :class="{ 'pipe-line--done': task.analysis }" />
             <span
               class="pipe-step"
-              :class="{ 'pipe-step--done': task.analysis }"
+              :class="{
+                'pipe-step--done': task.analysis,
+                'pipe-step--active': taskOps.isAnalyzing(task.id),
+              }"
               title="AI 分析"
             >
-              分析
+              {{ taskOps.isAnalyzing(task.id) ? '分析中' : '分析' }}
             </span>
             <span class="pipe-line" :class="{ 'pipe-line--done': task.draft }" />
             <span
               class="pipe-step"
-              :class="{ 'pipe-step--done': task.draft }"
+              :class="{
+                'pipe-step--done': task.draft,
+                'pipe-step--active': taskOps.isGenerating(task.id),
+              }"
               title="类似笔记"
             >
-              生成
+              {{ taskOps.isGenerating(task.id) ? '生成中' : '生成' }}
             </span>
           </div>
         </div>
@@ -64,12 +79,15 @@ const emit = defineEmits<{
       <NPopconfirm
         positive-text="删除"
         negative-text="取消"
+        :disabled="taskOps.isBusy(task.id)"
         @positive-click="emit('delete', task.id)"
       >
         <template #trigger>
           <button
             type="button"
             class="task-delete"
+            :class="{ 'task-delete--disabled': taskOps.isBusy(task.id) }"
+            :disabled="taskOps.isBusy(task.id)"
             aria-label="删除任务"
             @click.stop
           >
@@ -177,6 +195,18 @@ const emit = defineEmits<{
   gap: 4px;
 }
 
+.task-item--busy {
+  border-color: #ffb3c0;
+  background: #fffafb;
+}
+
+.task-item-title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
 .task-item-title {
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -185,6 +215,27 @@ const emit = defineEmits<{
   font-size: 14px;
   line-height: 1.4;
   color: #1d2129;
+  flex: 1;
+  min-width: 0;
+}
+
+.task-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #fff1f0;
+  color: #ff2442;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.task-status-spin {
+  width: 12px;
+  height: 12px;
 }
 
 .task-item-meta {
@@ -223,8 +274,19 @@ const emit = defineEmits<{
   white-space: nowrap;
 }
 
-.pipe-step--done {
+.pipe-step--active {
   color: #ff2442;
+  animation: pipe-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pipe-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
 }
 
 .pipe-line {
@@ -269,9 +331,23 @@ const emit = defineEmits<{
   transition: color 0.15s ease, background 0.15s ease;
 }
 
-.task-delete:hover {
+.task-delete:hover:not(:disabled) {
   color: #f53f3f;
   background: #fff1f0;
+}
+
+.pipe-step--done {
+  color: #ff2442;
+}
+
+.task-delete--disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.task-delete--disabled:hover {
+  color: #c9cdd4;
+  background: transparent;
 }
 
 .task-delete svg {

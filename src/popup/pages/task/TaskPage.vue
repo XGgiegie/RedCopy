@@ -2,19 +2,19 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { NButton, NPopconfirm, useMessage } from 'naive-ui'
+import { useTaskOperationsStore } from '../../stores/task-operations'
 import {
-  type AnalysisProvider,
-  type DeepSeekModel,
   type DoubaoModel,
-  getAnalysisProviderLabel,
-  isAnalysisConfigured,
+  isAiConfigured,
   isGenerateConfigured,
-  isProviderConfigured,
   loadAiSettings,
   saveAnalysisModel,
-  saveAnalysisProvider,
 } from '../../../shared/ai-settings'
-import type { GeneratedNoteDraft } from '../../../shared/ai-types'
+import type {
+  GeneratedImageRecord,
+  GeneratedNoteDraft,
+} from '../../../shared/ai-types'
+import { normalizeGeneratedDraft } from '../../../shared/parse-generated-draft'
 import {
   copyTextToClipboard,
   formatAnalysisAsMarkdown,
@@ -43,6 +43,7 @@ import NotePreviewCard from './NotePreviewCard.vue'
 const route = useRoute()
 const router = useRouter()
 const message = useMessage()
+const taskOps = useTaskOperationsStore()
 
 /** 当前任务 id（路由参数），切换任务时整页状态随之重载 */
 const taskId = computed(() => String(route.params.id ?? ''))
@@ -55,52 +56,29 @@ const contentView = ref<ContentView>('note')
 const draftModel = ref<GeneratedNoteDraft | null>(null)
 const generateTopic = ref('')
 
-const isAnalyzing = ref(false)
-const isGenerating = ref(false)
+const isAnalyzing = computed(() => taskOps.isAnalyzing(taskId.value))
+const isGenerating = computed(() => taskOps.isGenerating(taskId.value))
 const showGenerateDialog = ref(false)
 const isDownloadingAllImages = ref(false)
 const downloadingImageIndex = ref<number | null>(null)
 
 // ── AI 设置（任务页内联，仅本页消费） ────────────────────────
 
-const analysisProvider = ref<AnalysisProvider>('deepseek')
-const deepseekModel = ref<DeepSeekModel>('deepseek-v4-flash')
-const doubaoModel = ref<DoubaoModel>('doubao-seed-2-0-pro-260215')
-const hasDeepseekKey = ref(false)
-const hasDoubaoKey = ref(false)
-const isAiConfigured = ref(false)
+const analysisModel = ref<DoubaoModel>('doubao-seed-2-0-lite-260428')
+const isAiConfiguredRef = ref(false)
 const isGenerateReady = ref(false)
-
-const analysisModel = computed<DeepSeekModel | DoubaoModel>(() =>
-  analysisProvider.value === 'doubao' ? doubaoModel.value : deepseekModel.value,
-)
-const supportsVision = computed(() => analysisProvider.value === 'doubao')
-const analysisProviderLabel = computed(() =>
-  getAnalysisProviderLabel(analysisProvider.value),
-)
 
 async function refreshAiSettings() {
   const settings = await loadAiSettings()
-  analysisProvider.value = settings.analysisProvider
-  deepseekModel.value = settings.deepseek.model
-  doubaoModel.value = settings.doubao.model
-  hasDeepseekKey.value = isProviderConfigured(settings, 'deepseek')
-  hasDoubaoKey.value = isProviderConfigured(settings, 'doubao')
-  isAiConfigured.value = isAnalysisConfigured(settings)
+  analysisModel.value = settings.model
+  isAiConfiguredRef.value = isAiConfigured(settings)
   isGenerateReady.value = isGenerateConfigured(settings)
 }
 
-async function setAnalysisProvider(provider: AnalysisProvider) {
-  if (provider === analysisProvider.value) return
-  await saveAnalysisProvider(provider)
+async function setAnalysisModel(model: DoubaoModel) {
+  await saveAnalysisModel(model)
   await refreshAiSettings()
-  console.info('[RedCopy] 分析服务商已切换', { provider })
-}
-
-async function setAnalysisModel(model: DeepSeekModel | DoubaoModel) {
-  await saveAnalysisModel(analysisProvider.value, model)
-  await refreshAiSettings()
-  console.info('[RedCopy] 分析模型已切换', { provider: analysisProvider.value, model })
+  console.info('[RedCopy] 分析模型已切换', { model })
 }
 
 function onStorageChanged(
@@ -117,6 +95,7 @@ const note = computed(() => task.value?.note ?? null)
 const noteType = computed(() => task.value?.noteType ?? 'normal')
 const analysis = computed(() => task.value?.analysis ?? null)
 const images = computed(() => task.value?.note.images ?? [])
+const imageHistory = computed(() => task.value?.imageHistory ?? [])
 
 const hasNote = computed(() => !!note.value)
 const hasAnalysis = computed(() => !!analysis.value)
@@ -133,9 +112,7 @@ const noteBodyText = computed(() => {
 // ── 配图勾选（识图分析用） ───────────────────────────────────
 
 const selectedIndices = ref<number[]>([])
-const enableImageSelection = computed(
-  () => supportsVision.value && images.value.length > 0,
-)
+const enableImageSelection = computed(() => images.value.length > 0)
 const selectedImageUrls = computed(() =>
   selectedIndices.value
     .map((index) => images.value[index])
@@ -186,7 +163,7 @@ const showDraftSection = computed(() => !!draftModel.value && isActiveView('draf
 // ── 加载任务 ────────────────────────────────────────────────
 
 function normalizeDraft(draft: GeneratedNoteDraft): GeneratedNoteDraft {
-  return { ...draft, tags: draft.tags ?? [], imageTips: draft.imageTips ?? '' }
+  return normalizeGeneratedDraft(draft)
 }
 
 async function loadTask(id: string) {
@@ -195,10 +172,24 @@ async function loadTask(id: string) {
   task.value = found
 
   if (found) {
-    draftModel.value = found.draft ? normalizeDraft(found.draft) : null
+    const normalizedDraft = found.draft ? normalizeDraft(found.draft) : null
+    draftModel.value = normalizedDraft
     generateTopic.value = found.generateTopic ?? ''
     contentView.value = found.draft ? 'draft' : found.analysis ? 'analysis' : 'note'
     selectedIndices.value = (found.note.images ?? []).map((_, index) => index)
+
+    // 修复历史未解析成功的 JSON 草稿，或迁移旧版 imageTips → imagePrompts
+    if (
+      found.draft &&
+      normalizedDraft &&
+      (normalizedDraft.title !== found.draft.title ||
+        (normalizedDraft.imagePrompts.length > 0 &&
+          !(found.draft.imagePrompts?.length)))
+    ) {
+      await updateTask(id, { draft: normalizedDraft })
+      task.value = { ...found, draft: normalizedDraft }
+    }
+
     console.info('[RedCopy] 进入任务', { id, noteId: found.noteId })
   } else {
     draftModel.value = null
@@ -221,7 +212,6 @@ async function handleAnalyze() {
     return
   }
   if (
-    supportsVision.value &&
     current.note.images?.length &&
     selectedImageUrls.value.length === 0
   ) {
@@ -229,12 +219,10 @@ async function handleAnalyze() {
     return
   }
 
-  isAnalyzing.value = true
+  taskOps.start(id, 'analyzing')
   try {
     const imageUrls =
-      supportsVision.value && selectedImageUrls.value.length > 0
-        ? selectedImageUrls.value
-        : undefined
+      selectedImageUrls.value.length > 0 ? selectedImageUrls.value : undefined
 
     const analysisResult = await analyzeNoteText({
       noteId: current.noteId,
@@ -264,7 +252,7 @@ async function handleAnalyze() {
     console.error('[RedCopy] AI 分析失败', { id, detail }, error)
     message.error(`分析失败：${detail}`)
   } finally {
-    isAnalyzing.value = false
+    taskOps.stop(id, 'analyzing')
   }
 }
 
@@ -289,7 +277,7 @@ async function handleGenerate(topicInput?: string) {
   }
 
   if (topicInput !== undefined) generateTopic.value = topicInput
-  isGenerating.value = true
+  taskOps.start(id, 'generating')
   try {
     const draft = await generateNoteDraft({
       noteId: current.noteId,
@@ -318,7 +306,7 @@ async function handleGenerate(topicInput?: string) {
     console.error('[RedCopy] 生成类似笔记失败', { id, detail }, error)
     message.error(`生成失败：${detail}`)
   } finally {
-    isGenerating.value = false
+    taskOps.stop(id, 'generating')
   }
 }
 
@@ -346,6 +334,30 @@ async function persistDraft(id: string) {
     const detail = error instanceof Error ? error.message : String(error)
     console.error('[RedCopy] 保存草稿编辑失败', { id, detail }, error)
   }
+}
+
+// ── 配图生成历史（生成即落库，避免离开页面丢失） ────────────
+
+async function handleImageGenerated(record: GeneratedImageRecord) {
+  const current = task.value
+  if (!current) return
+  const id = current.id
+  const nextHistory = [record, ...(current.imageHistory ?? [])]
+  const updated = await updateTask(id, { imageHistory: nextHistory })
+  if (taskId.value === id && updated) task.value = updated
+  console.info('[RedCopy] 配图已入历史并持久化', { id, recordId: record.id })
+}
+
+async function handleDeleteImage(recordId: string) {
+  const current = task.value
+  if (!current) return
+  const id = current.id
+  const nextHistory = (current.imageHistory ?? []).filter(
+    (item) => item.id !== recordId,
+  )
+  const updated = await updateTask(id, { imageHistory: nextHistory })
+  if (taskId.value === id && updated) task.value = updated
+  console.info('[RedCopy] 已从配图历史删除', { id, recordId })
 }
 
 // ── 复制 / 下载 ─────────────────────────────────────────────
@@ -492,7 +504,13 @@ onMounted(() => {
 
 onUnmounted(() => {
   chrome.storage?.onChanged?.removeListener(onStorageChanged)
-  if (persistTimer) clearTimeout(persistTimer)
+  // 离开页面前若仍有未保存的草稿编辑，立即刷盘，避免丢失
+  if (persistTimer) {
+    clearTimeout(persistTimer)
+    persistTimer = null
+    const id = task.value?.id
+    if (id && draftModel.value) void persistDraft(id)
+  }
 })
 </script>
 
@@ -529,19 +547,18 @@ onUnmounted(() => {
       </div>
 
       <AnalyzeBar
+        :content-view="contentView"
         :has-note="hasNote"
+        :has-analysis="hasAnalysis"
+        :has-draft="hasDraft"
         :is-analyzing="isAnalyzing"
         :is-generating="isGenerating"
-        :is-ai-configured="isAiConfigured"
-        :has-analysis="hasAnalysis"
-        :analysis-provider="analysisProvider"
-        :analysis-model="analysisModel"
-        :has-deepseek-key="hasDeepseekKey"
-        :has-doubao-key="hasDoubaoKey"
-        :analysis-provider-label="analysisProviderLabel"
+        :is-ai-configured="isAiConfiguredRef"
+        :is-generate-ready="isGenerateReady"
+        :model="analysisModel"
         @analyze="handleAnalyze"
-        @update:analysis-provider="setAnalysisProvider"
-        @update:analysis-model="setAnalysisModel"
+        @generate="openGenerateDialog"
+        @update:model="setAnalysisModel"
         @open-settings="openSettings"
       />
 
@@ -574,22 +591,21 @@ onUnmounted(() => {
       <AnalysisCard
         v-if="showAnalysisSection && analysis"
         :analysis="analysis"
-        :show-generate="hasAnalysis"
-        :is-generating="isGenerating"
-        :is-generate-ready="isGenerateReady"
-        :is-analyzing="isAnalyzing"
-        :has-draft="hasDraft"
         @copy-text="handleCopyAnalysisText"
         @copy-markdown="handleCopyAnalysisMarkdown"
-        @generate-similar="openGenerateDialog"
       />
 
       <DraftEditorCard
         v-if="showDraftSection && draftModel"
         v-model:draft="draftModel"
+        :task-id="taskId"
+        :is-generate-ready="isGenerateReady"
+        :image-history="imageHistory"
         @copy-text="handleCopyDraftText"
         @copy-markdown="handleCopyDraftMarkdown"
         @edit="scheduleDraftPersist"
+        @generated="handleImageGenerated"
+        @delete-image="handleDeleteImage"
       />
     </template>
 
