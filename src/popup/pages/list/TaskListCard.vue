@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { NPopconfirm, NSpin, NText } from 'naive-ui'
+import { NPopconfirm, NText } from 'naive-ui'
 import { type Task, formatTaskTime } from '../../../shared/task-db'
 import { useTaskOperationsStore } from '../../stores/task-operations'
 
@@ -35,7 +35,7 @@ const taskOps = useTaskOperationsStore()
               {{ task.note.title || '（无标题）' }}
             </NText>
             <span v-if="taskOps.getStatusLabel(task.id)" class="task-status-badge">
-              <NSpin size="small" class="task-status-spin" />
+              <span class="task-status-spinner" aria-hidden="true" />
               {{ taskOps.getStatusLabel(task.id) }}
             </span>
           </div>
@@ -47,7 +47,13 @@ const taskOps = useTaskOperationsStore()
           </div>
           <div class="task-pipeline" aria-label="进度">
             <span class="pipe-step pipe-step--done" title="已提取">提取</span>
-            <span class="pipe-line" :class="{ 'pipe-line--done': task.analysis }" />
+            <span
+              class="pipe-line"
+              :class="{
+                'pipe-line--done': task.analysis,
+                'pipe-line--active': taskOps.isAnalyzing(task.id) && !task.analysis,
+              }"
+            />
             <span
               class="pipe-step"
               :class="{
@@ -56,18 +62,26 @@ const taskOps = useTaskOperationsStore()
               }"
               title="AI 分析"
             >
-              {{ taskOps.isAnalyzing(task.id) ? '分析中' : '分析' }}
+              分析
             </span>
-            <span class="pipe-line" :class="{ 'pipe-line--done': task.draft }" />
+            <span
+              class="pipe-line"
+              :class="{
+                'pipe-line--done': task.draft,
+                'pipe-line--active': taskOps.isGenerating(task.id) && !task.draft,
+              }"
+            />
             <span
               class="pipe-step"
               :class="{
                 'pipe-step--done': task.draft,
-                'pipe-step--active': taskOps.isGenerating(task.id),
+                'pipe-step--active':
+                  taskOps.isGenerating(task.id) ||
+                  taskOps.isGeneratingImagesForTask(task.id),
               }"
               title="类似笔记"
             >
-              {{ taskOps.isGenerating(task.id) ? '生成中' : '生成' }}
+              生成
             </span>
           </div>
         </div>
@@ -222,20 +236,32 @@ const taskOps = useTaskOperationsStore()
 .task-status-badge {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   flex-shrink: 0;
-  padding: 2px 6px;
-  border-radius: 4px;
+  padding: 2px 7px;
+  border-radius: 999px;
   background: #fff1f0;
   color: #ff2442;
   font-size: 10px;
   font-weight: 600;
+  line-height: 1.2;
   white-space: nowrap;
 }
 
-.task-status-spin {
-  width: 12px;
-  height: 12px;
+.task-status-spinner {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid #ffd6dc;
+  border-top-color: #ff2442;
+  border-radius: 50%;
+  animation: task-status-spin 0.65s linear infinite;
+}
+
+@keyframes task-status-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .task-item-meta {
@@ -272,21 +298,17 @@ const taskOps = useTaskOperationsStore()
   color: #c9cdd4;
   font-weight: 500;
   white-space: nowrap;
+  padding: 1px 0;
+  transition: color 0.15s ease, background 0.15s ease;
 }
 
 .pipe-step--active {
   color: #ff2442;
-  animation: pipe-pulse 1.4s ease-in-out infinite;
+  font-weight: 600;
 }
 
-@keyframes pipe-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.55;
-  }
+.pipe-step--done {
+  color: #ff2442;
 }
 
 .pipe-line {
@@ -297,10 +319,26 @@ const taskOps = useTaskOperationsStore()
   margin: 0 4px;
   border-radius: 1px;
   background: #e5e6eb;
+  transition: background 0.15s ease;
 }
 
 .pipe-line--done {
   background: #ffb3c0;
+}
+
+.pipe-line--active {
+  background: linear-gradient(90deg, #e5e6eb 0%, #ff2442 45%, #e5e6eb 90%);
+  background-size: 200% 100%;
+  animation: pipe-line-flow 1.1s ease-in-out infinite;
+}
+
+@keyframes pipe-line-flow {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
 }
 
 .task-chevron {
@@ -334,10 +372,6 @@ const taskOps = useTaskOperationsStore()
 .task-delete:hover:not(:disabled) {
   color: #f53f3f;
   background: #fff1f0;
-}
-
-.pipe-step--done {
-  color: #ff2442;
 }
 
 .task-delete--disabled {

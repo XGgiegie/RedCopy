@@ -81,7 +81,25 @@ export function normalizeImagePrompts(draft: GeneratedNoteDraft): DraftImageProm
   return []
 }
 
-/** 校验是否为合法的 data:image/<格式>;base64, 前缀（格式需小写） */
+/** 常见图片扩展名（用于 file.type 为空时的兜底识别） */
+const IMAGE_FILE_EXT_RE = /\.(jpe?g|png|gif|webp|bmp|heic|heif|avif|svg)$/i
+
+/** 判断本地文件是否可能为图片（兼容部分系统 file.type 为空的情况） */
+export function isLikelyImageFile(file: File): boolean {
+  const mime = file.type.trim().toLowerCase()
+  if (mime.startsWith('image/')) return true
+  return IMAGE_FILE_EXT_RE.test(file.name.trim())
+}
+
+/** 校验是否为合法的 data:image/<格式>;base64, 前缀 */
 export function isValidImageDataUrl(value: string): boolean {
-  return /^data:image\/[a-z0-9.+-]+;base64,/.test(value.trim())
+  return /^data:image\/[a-z0-9.+-]+;base64,/i.test(value.trim())
+}
+
+/** 将 data URL 的 MIME 子类型规范为小写，便于存储与 API 使用 */
+export function normalizeImageDataUrl(value: string): string {
+  const trimmed = value.trim()
+  const match = trimmed.match(/^(data:image\/)([a-z0-9.+-]+)(;base64,.+)$/i)
+  if (!match) return trimmed
+  return `${match[1]}${match[2].toLowerCase()}${match[3]}`
 }

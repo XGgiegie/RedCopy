@@ -342,12 +342,21 @@ async function persistDraft(id: string) {
 
 async function handleImageGenerated(record: GeneratedImageRecord) {
   const current = task.value
-  if (!current) return
+  if (!current) {
+    message.error('任务未加载，配图无法保存')
+    return
+  }
   const id = current.id
-  const nextHistory = [record, ...(current.imageHistory ?? [])]
-  const updated = await updateTask(id, { imageHistory: nextHistory })
-  if (taskId.value === id && updated) task.value = updated
-  console.info('[RedCopy] 配图已入历史并持久化', { id, recordId: record.id })
+  try {
+    const nextHistory = [record, ...(current.imageHistory ?? [])]
+    const updated = await updateTask(id, { imageHistory: nextHistory })
+    if (taskId.value === id && updated) task.value = updated
+    console.info('[RedCopy] 配图已入历史并持久化', { id, recordId: record.id })
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    console.error('[RedCopy] 配图保存失败', { id, recordId: record.id, detail }, error)
+    message.error(`配图保存失败：${detail}`)
+  }
 }
 
 async function handleDeleteImage(recordId: string) {

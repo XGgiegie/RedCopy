@@ -16,7 +16,9 @@ import {
   aspectRatioOfSize,
   createEmptyImagePrompt,
   createImageRecordId,
+  isLikelyImageFile,
   isValidImageDataUrl,
+  normalizeImageDataUrl,
 } from '../../../shared/draft-image'
 import {
   copyTextToClipboard,
@@ -42,10 +44,6 @@ const emit = defineEmits<{
 
 const message = useMessage()
 const taskOps = useTaskOperationsStore()
-
-const fileInputRef = ref<HTMLInputElement | null>(null)
-const imageInputRef = ref<HTMLInputElement | null>(null)
-const uploadTargetId = ref<string | null>(null)
 
 // 参考图与尺寸属于本地临时输入，不写入持久化草稿（避免 base64 撑爆存储）
 const referencesByPrompt = reactive<Record<string, string[]>>({})
@@ -111,9 +109,15 @@ function readFileAsDataUrl(file: File): Promise<string> {
 }
 
 async function addReferenceFiles(id: string, files: FileList | File[]) {
-  const list = Array.from(files).filter((file) => file.type.startsWith('image/'))
+  const all = Array.from(files)
+  console.info('[RedCopy] 选择参考图', {
+    id,
+    count: all.length,
+    files: all.map((f) => ({ name: f.name, type: f.type, size: f.size })),
+  })
+  const list = all.filter((file) => isLikelyImageFile(file))
   if (list.length === 0) {
-    message.warning('请选择图片文件')
+    message.warning('请选择图片文件（支持 JPG、PNG、WebP 等）')
     return
   }
 
@@ -124,41 +128,49 @@ async function addReferenceFiles(id: string, files: FileList | File[]) {
       continue
     }
     try {
-      const dataUrl = await readFileAsDataUrl(file)
+      const dataUrl = normalizeImageDataUrl(await readFileAsDataUrl(file))
       if (!isValidImageDataUrl(dataUrl)) {
+        console.warn('[RedCopy] 参考图格式校验未通过', {
+          name: file.name,
+          type: file.type,
+          prefix: dataUrl.slice(0, 32),
+        })
         message.warning(`「${file.name}」格式不受支持，已跳过`)
         continue
       }
       accepted.push(dataUrl)
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error)
-      console.error('[RedCopy] 读取参考图失败', { detail }, error)
+      console.error('[RedCopy] 读取参考图失败', { name: file.name, detail }, error)
+      message.warning(`「${file.name}」读取失败`)
     }
   }
 
-  if (accepted.length === 0) return
+  if (accepted.length === 0) {
+    message.warning('未能添加参考图，请换用 JPG / PNG / WebP 后重试')
+    return
+  }
   referencesByPrompt[id] = [...getReferences(id), ...accepted]
   message.success(`已添加 ${accepted.length} 张参考图`)
 }
 
-function triggerUpload(id: string) {
-  uploadTargetId.value = id
-  fileInputRef.value?.click()
-}
-
-async function onFileSelected(event: Event) {
+function onReferenceFileChange(id: string, event: Event) {
   const input = event.target as HTMLInputElement
   const files = input.files
-  const id = uploadTargetId.value
+  console.info('[RedCopy] 参考图 input change 触发', {
+    id,
+    fileCount: files?.length ?? 0,
+  })
+  const selected = files ? Array.from(files) : []
   input.value = ''
-  uploadTargetId.value = null
-  if (!files || !id) return
-  await addReferenceFiles(id, files)
+  if (selected.length === 0) return
+  void addReferenceFiles(id, selected)
 }
 
 function onDrop(id: string, event: DragEvent) {
   dragOverId.value = null
   const files = event.dataTransfer?.files
+  console.info('[RedCopy] 参考图拖拽 drop', { id, fileCount: files?.length ?? 0 })
   if (files && files.length > 0) {
     void addReferenceFiles(id, files)
   }
@@ -222,19 +234,11 @@ async function handleGenerate(item: DraftImagePrompt) {
 
 // ── 用户上传自己的配图（直接入历史，不经过 AI 生成） ─────────
 
-function triggerImageUpload() {
-  imageInputRef.value?.click()
-}
-
-async function onImageFilesSelected(event: Event) {
-  const input = event.target as HTMLInputElement
-  const files = input.files
-  input.value = ''
-  if (!files || files.length === 0) return
-
-  const list = Array.from(files).filter((file) => file.type.startsWith('image/'))
+/** 将一组本地图片文件转为配图历史记录（点击上传与剪贴板粘贴共用） */
+async function addUploadedImageFiles(files: File[]): Promise<void> {
+  const list = files.filter((file) => isLikelyImageFile(file))
   if (list.length === 0) {
-    message.warning('请选择图片文件')
+    message.warning('请选择图片文件（支持 JPG、PNG、WebP 等）')
     return
   }
 
@@ -245,8 +249,13 @@ async function onImageFilesSelected(event: Event) {
       continue
     }
     try {
-      const dataUrl = await readFileAsDataUrl(file)
+      const dataUrl = normalizeImageDataUrl(await readFileAsDataUrl(file))
       if (!isValidImageDataUrl(dataUrl)) {
+        console.warn('[RedCopy] 上传配图格式校验未通过', {
+          name: file.name,
+          type: file.type,
+          prefix: dataUrl.slice(0, 32),
+        })
         message.warning(`「${file.name}」格式不受支持，已跳过`)
         continue
       }
@@ -264,11 +273,43 @@ async function onImageFilesSelected(event: Event) {
       added += 1
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error)
-      console.error('[RedCopy] 上传配图失败', { detail }, error)
+      console.error('[RedCopy] 上传配图失败', { name: file.name, detail }, error)
+      message.warning(`「${file.name}」读取失败`)
     }
   }
 
   if (added > 0) message.success(`已上传 ${added} 张配图到历史`)
+  else message.warning('未能上传配图，请换用 JPG / PNG / WebP 后重试')
+}
+
+async function onImageFilesSelected(event: Event) {
+  const input = event.target as HTMLInputElement
+  const files = input.files
+  const all = files ? Array.from(files) : []
+  console.info('[RedCopy] 上传配图 input change 触发', {
+    fileCount: all.length,
+    files: all.map((f) => ({ name: f.name, type: f.type, size: f.size })),
+  })
+  input.value = ''
+  if (all.length === 0) return
+  await addUploadedImageFiles(all)
+}
+
+/** 剪贴板粘贴上传：侧栏内即使点击被其他扩展拦截，粘贴仍可用 */
+function onPasteUpload(event: ClipboardEvent) {
+  const items = event.clipboardData?.items
+  if (!items) return
+  const files: File[] = []
+  for (const item of items) {
+    if (item.kind === 'file' && item.type.startsWith('image/')) {
+      const file = item.getAsFile()
+      if (file) files.push(file)
+    }
+  }
+  if (files.length === 0) return
+  console.info('[RedCopy] 剪贴板粘贴图片', { count: files.length })
+  event.preventDefault()
+  void addUploadedImageFiles(files)
 }
 
 // ── 单图操作 ────────────────────────────────────────────────
@@ -304,36 +345,26 @@ const promptCount = computed(() => imagePrompts.value.length)
 </script>
 
 <template>
-  <div class="image-prompt-list">
-    <input
-      ref="fileInputRef"
-      type="file"
-      accept="image/*"
-      multiple
-      class="hidden-file-input"
-      @change="onFileSelected"
-    />
-    <input
-      ref="imageInputRef"
-      type="file"
-      accept="image/*"
-      multiple
-      class="hidden-file-input"
-      @change="onImageFilesSelected"
-    />
-
+  <div class="image-prompt-list" @paste="onPasteUpload">
     <div class="image-prompt-header">
       <NText depth="3" class="content-label">配图创作 · {{ promptCount }} 条</NText>
       <NSpace :size="6">
-        <NButton size="tiny" quaternary @click="triggerImageUpload">
+        <label class="upload-config-btn">
           上传配图
-        </NButton>
+          <input
+            type="file"
+            accept="image/*"
+            multiple
+            class="hidden-file-input"
+            @change="onImageFilesSelected"
+          />
+        </label>
         <NButton size="tiny" secondary @click="addPrompt">添加配图</NButton>
       </NSpace>
     </div>
 
     <NText depth="3" class="image-prompt-hint">
-      每条提示词可直接文生图；上传 / 拖拽参考图后转为图生图（支持多图融合），生成前可自由编辑提示词与尺寸。
+      每条提示词可直接文生图；上传 / 拖拽 / 粘贴（Ctrl+V）参考图后转为图生图（支持多图融合），生成前可自由编辑提示词与尺寸。若点击「上传配图」无法弹出文件框，请改用拖拽或粘贴。
     </NText>
 
     <div v-if="promptCount === 0" class="image-prompt-empty">
@@ -385,19 +416,25 @@ const promptCount = computed(() => imagePrompts.value.length)
         </div>
       </div>
 
-      <div
+      <label
         class="dropzone"
         :class="{ 'dropzone-active': dragOverId === item.id }"
-        @click="triggerUpload(item.id)"
         @dragover.prevent="dragOverId = item.id"
         @dragenter.prevent="dragOverId = item.id"
         @dragleave.prevent="dragOverId = null"
         @drop.prevent="onDrop(item.id, $event)"
       >
+        <input
+          type="file"
+          accept="image/*"
+          multiple
+          class="hidden-file-input"
+          @change="(e) => onReferenceFileChange(item.id, e)"
+        />
         <NText depth="3" class="dropzone-text">
           点击或拖拽上传参考图（可多张，转 Base64 图生图）
         </NText>
-      </div>
+      </label>
 
       <div v-if="getReferences(item.id).length > 0" class="reference-grid">
         <div
@@ -492,6 +529,25 @@ const promptCount = computed(() => imagePrompts.value.length)
   margin-bottom: 0;
 }
 
+/* 上传配图按钮用原生 label 包裹 input，确保侧栏内可靠唤起文件选择框 */
+.upload-config-btn {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #4e5969;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+  user-select: none;
+}
+
+.upload-config-btn:hover {
+  background: #f2f3f5;
+  color: #ff2442;
+}
+
 .image-prompt-hint {
   display: block;
   font-size: 12px;
@@ -550,6 +606,7 @@ const promptCount = computed(() => imagePrompts.value.length)
 }
 
 .dropzone {
+  display: block;
   margin-top: 8px;
   padding: 12px;
   border: 1px dashed #c9cdd4;
@@ -674,7 +731,18 @@ const promptCount = computed(() => imagePrompts.value.length)
   text-overflow: ellipsis;
 }
 
+/* 文件输入用「视觉隐藏」而非 display:none——
+   部分 Chrome 状态下 display:none / visibility:hidden 的 input 点击不弹出文件框 */
 .hidden-file-input {
-  display: none;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 </style>
