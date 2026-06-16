@@ -5,13 +5,14 @@ import {
   NMessageProvider,
 } from 'naive-ui'
 import App from './App.vue'
+import { router } from './router'
 import { dateZhCN, themeOverrides, zhCN } from '../shared/naive'
 
 // Naive UI 推荐字体（本地 woff2，适合扩展环境）
 import 'vfonts/Inter.css'
 import 'vfonts/FiraCode.css'
 
-createApp({
+const app = createApp({
   render: () =>
     h(
       NConfigProvider,
@@ -27,4 +28,7 @@ createApp({
         ],
       },
     ),
-}).mount('#app')
+})
+
+app.use(router)
+app.mount('#app')

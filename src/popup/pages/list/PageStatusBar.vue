@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import InfoTip from './InfoTip.vue'
+import InfoTip from '../../components/InfoTip.vue'
 
 const props = defineProps<{
   isXhsPage: boolean

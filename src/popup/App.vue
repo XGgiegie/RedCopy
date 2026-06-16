@@ -1,262 +1,85 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { APP_NAME } from '../shared/brand'
-import ExtractActionBar from './components/actions/ExtractActionBar.vue'
-import GenerateSimilarNoteDialog from './components/actions/GenerateSimilarNoteDialog.vue'
-import AnalysisCard from './components/content/AnalysisCard.vue'
-import ContentViewTabs from './components/content/ContentViewTabs.vue'
-import DraftEditorCard from './components/content/DraftEditorCard.vue'
-import HistoryDetailHeader from './components/history/HistoryDetailHeader.vue'
-import HistoryListCard from './components/history/HistoryListCard.vue'
-import NotePreviewCard from './components/content/NotePreviewCard.vue'
-import InfoTip from './components/layout/InfoTip.vue'
-import PageStatusBar from './components/layout/PageStatusBar.vue'
-import PanelLoading from './components/layout/PanelLoading.vue'
-import PanelFooter from './components/layout/PanelFooter.vue'
-import SettingsGearButton from './components/layout/SettingsGearButton.vue'
-import SettingsPage from './components/settings/SettingsPage.vue'
-import { usePanelSession } from './composables/use-panel-session'
+import AppFooter from './components/AppFooter.vue'
+import InfoTip from './components/InfoTip.vue'
 
-const { page, ai, view, history, imageSelection, state, note, analysis, draft, isPanelLoading } =
-  usePanelSession()
-
-const { isXhsPage, isNotePage } = page
-const {
-  isAiConfigured,
-  isGenerateReady,
-  supportsVision,
-  isSettingsView,
-  analysisProvider,
-  analysisModel,
-  analysisProviderLabel,
-  hasDeepseekKey,
-  hasDoubaoKey,
-  setAnalysisProvider,
-  setAnalysisModel,
-  openSettingsPage,
-  closeSettingsPage,
-  handleSettingsSaved,
-  refreshAiSettings,
-} = ai
-const {
-  contentView,
-  contentViewOptions,
-  canSwitchView,
-  showNoteSection,
-  showAnalysisSection,
-  showDraftSection,
-} = view
-const {
-  records,
-  isListView,
-  isDetailView,
-  activeRecord,
-  openRecord,
-  backToList,
-  deleteRecord,
-} = history
-const { notePreview, extractedNoteType, analysisResult, generatedDraft } = state
-const {
-  hasNote,
-  isExtracting,
-  extractedImages,
-  noteBodyText,
-  isDownloadingAllImages,
-  downloadingImageIndex,
-  handleExtract,
-  handleCopyNoteMarkdown,
-  handleCopyNoteBody,
-  handleCopyNoteImages,
-  handleDownloadAllImages,
-  handleDownloadImage,
-} = note
-const {
-  isImageSelected,
-  setImageSelected,
-  selectAllImages,
-  clearImageSelection,
-} = imageSelection
-const {
-  isAnalyzing,
-  hasAnalysis,
-  handleAiAnalyze,
-  handleCopyAnalysisText,
-  handleCopyAnalysisMarkdown,
-} = analysis
-const {
-  generateTopic,
-  isGenerating,
-  hasDraft,
-  showGenerateDialog,
-  schedulePersistDraft,
-  openGenerateDialog,
-  handleGenerateSimilar,
-  handleCopyDraftText,
-  handleCopyDraftMarkdown,
-} = draft
-
-const enableImageSelection = computed(
-  () => supportsVision.value && extractedImages.value.length > 0,
-)
+const route = useRoute()
+const router = useRouter()
 
 const APP_TIP = '小红书笔记提取 · AI 分析 · 生成类似笔记'
 
-function handleSettingsCleared() {
-  void refreshAiSettings()
+const isHome = computed(() => route.name === 'list')
+const isSettings = computed(() => route.name === 'settings')
+
+const headerTitle = computed(() => {
+  if (isSettings.value) return 'API Key 设置'
+  if (route.name === 'task') return '笔记任务'
+  return ''
+})
+
+function goBack() {
+  if (window.history.length > 1) {
+    router.back()
+    return
+  }
+  void router.push('/')
 }
 
-function handleDeleteActiveRecord() {
-  if (!activeRecord.value) return
-  void deleteRecord(activeRecord.value.id)
+function openSettings() {
+  void router.push('/settings')
 }
 </script>
 
 <template>
-  <PanelLoading v-if="isPanelLoading" />
+  <div class="app-shell">
+    <header class="app-header">
+      <div class="app-header-left">
+        <button
+          v-if="!isHome"
+          type="button"
+          class="back-btn"
+          aria-label="返回"
+          @click="goBack"
+        >
+          <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+            <path d="M10 3.5 5.5 8 10 12.5 9 13.5l-5-5.5 5-5.5 1 1z" />
+          </svg>
+        </button>
 
-  <SettingsPage
-    v-else-if="isSettingsView"
-    @back="closeSettingsPage"
-    @saved="handleSettingsSaved"
-    @cleared="handleSettingsCleared"
-  />
-
-  <main v-else class="panel">
-    <header class="panel-top">
-      <div class="panel-brand">
-        <span class="brand-mark" aria-hidden="true">🍠</span>
-        <span class="brand-name">{{ APP_NAME }}</span>
-        <InfoTip :content="APP_TIP" />
+        <template v-if="isHome">
+          <span class="brand-mark" aria-hidden="true">🍠</span>
+          <span class="brand-name">{{ APP_NAME }}</span>
+          <InfoTip :content="APP_TIP" />
+        </template>
+        <span v-else class="header-title">{{ headerTitle }}</span>
       </div>
-      <SettingsGearButton @open-settings="openSettingsPage" />
+
+      <button
+        v-if="!isSettings"
+        type="button"
+        class="gear-btn"
+        title="配置 API Key"
+        aria-label="配置 API Key"
+        @click="openSettings"
+      >
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.52-.4-1.08-.73-1.69-.98l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.61.25-1.17.59-1.69.98l-2.39-.96a.488.488 0 0 0-.59.22l-1.92 3.32c-.12.22-.09.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.52.4 1.08.73 1.69.98l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.61-.25 1.17-.59 1.69-.98l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.09-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
+        </svg>
+      </button>
     </header>
 
-    <div class="panel-body">
-      <!-- 历史列表 -->
-      <div v-if="isListView" class="panel-view">
-        <PageStatusBar :is-xhs-page="isXhsPage" :is-note-page="isNotePage" />
+    <main class="app-body">
+      <router-view />
+    </main>
 
-        <ExtractActionBar
-          mode="list"
-          :has-note="hasNote"
-          :is-note-page="isNotePage"
-          :is-extracting="isExtracting"
-          :is-analyzing="isAnalyzing"
-          :is-generating="isGenerating"
-          :is-ai-configured="isAiConfigured"
-          :has-analysis="hasAnalysis"
-          :analysis-provider="analysisProvider"
-          :analysis-model="analysisModel"
-          :has-deepseek-key="hasDeepseekKey"
-          :has-doubao-key="hasDoubaoKey"
-          :analysis-provider-label="analysisProviderLabel"
-          @extract="handleExtract"
-          @analyze="handleAiAnalyze"
-          @update:analysis-provider="setAnalysisProvider"
-          @update:analysis-model="setAnalysisModel"
-          @open-settings="openSettingsPage"
-        />
-
-        <HistoryListCard
-          class="history-section"
-          :records="records"
-          @open="openRecord"
-          @delete="deleteRecord"
-        />
-      </div>
-
-      <!-- 历史详情 -->
-      <div v-else-if="isDetailView" class="panel-view">
-        <HistoryDetailHeader
-          :title="activeRecord?.note.title"
-          @back="backToList"
-          @delete="handleDeleteActiveRecord"
-        />
-
-        <ExtractActionBar
-          mode="detail"
-          :has-note="hasNote"
-          :is-note-page="isNotePage"
-          :is-extracting="isExtracting"
-          :is-analyzing="isAnalyzing"
-          :is-generating="isGenerating"
-          :is-ai-configured="isAiConfigured"
-          :has-analysis="hasAnalysis"
-          :analysis-provider="analysisProvider"
-          :analysis-model="analysisModel"
-          :has-deepseek-key="hasDeepseekKey"
-          :has-doubao-key="hasDoubaoKey"
-          :analysis-provider-label="analysisProviderLabel"
-          @extract="handleExtract"
-          @analyze="handleAiAnalyze"
-          @update:analysis-provider="setAnalysisProvider"
-          @update:analysis-model="setAnalysisModel"
-          @open-settings="openSettingsPage"
-        />
-
-        <ContentViewTabs
-          v-if="canSwitchView"
-          v-model="contentView"
-          :options="contentViewOptions"
-        />
-
-        <NotePreviewCard
-          v-if="showNoteSection && notePreview"
-          :note="notePreview"
-          :note-type="extractedNoteType"
-          :images="extractedImages"
-          :body-text="noteBodyText"
-          :is-downloading-all="isDownloadingAllImages"
-          :downloading-index="downloadingImageIndex"
-          :enable-image-selection="enableImageSelection"
-          :is-image-selected="isImageSelected"
-          @copy-markdown="handleCopyNoteMarkdown"
-          @copy-body="handleCopyNoteBody"
-          @copy-images="handleCopyNoteImages"
-          @download-all="handleDownloadAllImages"
-          @download-image="handleDownloadImage"
-          @set-image-selected="setImageSelected"
-          @select-all-images="selectAllImages"
-          @clear-image-selection="clearImageSelection"
-        />
-
-        <AnalysisCard
-          v-if="showAnalysisSection && analysisResult"
-          :analysis="analysisResult"
-          :show-generate="hasAnalysis"
-          :is-generating="isGenerating"
-          :is-generate-ready="isGenerateReady"
-          :is-analyzing="isAnalyzing"
-          :has-draft="hasDraft"
-          @copy-text="handleCopyAnalysisText"
-          @copy-markdown="handleCopyAnalysisMarkdown"
-          @generate-similar="openGenerateDialog"
-        />
-
-        <DraftEditorCard
-          v-if="showDraftSection && generatedDraft"
-          v-model:draft="generatedDraft"
-          @copy-text="handleCopyDraftText"
-          @copy-markdown="handleCopyDraftMarkdown"
-          @edit="schedulePersistDraft"
-        />
-      </div>
-
-      <PanelFooter />
-    </div>
-
-    <GenerateSimilarNoteDialog
-      v-model:show="showGenerateDialog"
-      :initial-topic="generateTopic"
-      :is-generating="isGenerating"
-      :has-draft="hasDraft"
-      @confirm="handleGenerateSimilar"
-    />
-  </main>
+    <AppFooter />
+  </div>
 </template>
 
 <style scoped>
-.panel {
+.app-shell {
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -267,17 +90,18 @@ function handleDeleteActiveRecord() {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 }
 
-.panel-top {
+.app-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-shrink: 0;
+  gap: 8px;
   padding: 10px 12px;
   background: #fff;
   border-bottom: 1px solid #eef0f4;
 }
 
-.panel-brand {
+.app-header-left {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -296,27 +120,52 @@ function handleDeleteActiveRecord() {
   letter-spacing: -0.02em;
 }
 
-.panel-body {
+.header-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1d2129;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.back-btn,
+.gear-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #86909c;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.back-btn:hover,
+.gear-btn:hover {
+  color: #ff2442;
+  background: #f2f3f5;
+}
+
+.back-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.gear-btn svg {
+  width: 17px;
+  height: 17px;
+}
+
+.app-body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 10px 12px 12px;
-}
-
-.panel-view {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  flex: 1;
-  min-height: 0;
-}
-
-.history-section {
-  flex: 1;
-  min-height: 120px;
 }
 </style>

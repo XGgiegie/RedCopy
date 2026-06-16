@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { NTooltip } from 'naive-ui'
-import { CONTACT_GROUP, CONTACT_QQ } from '../../../shared/brand'
+import { CONTACT_GROUP, CONTACT_QQ } from '../../shared/brand'
 
 const FEEDBACK_TIP = `交流反馈\nQQ：${CONTACT_QQ}\n群：${CONTACT_GROUP}`
 const FLOW_TIP =
@@ -8,7 +8,7 @@ const FLOW_TIP =
 </script>
 
 <template>
-  <footer class="panel-footer">
+  <footer class="app-footer">
     <NTooltip trigger="hover" placement="top" :style="{ maxWidth: '240px' }">
       <template #trigger>
         <button type="button" class="footer-icon" aria-label="使用流程">
@@ -38,13 +38,15 @@ const FLOW_TIP =
 </template>
 
 <style scoped>
-.panel-footer {
+.app-footer {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 16px;
-  margin-top: 4px;
-  padding-top: 8px;
+  flex-shrink: 0;
+  padding: 8px 12px;
+  background: #fff;
+  border-top: 1px solid #eef0f4;
 }
 
 .footer-icon {

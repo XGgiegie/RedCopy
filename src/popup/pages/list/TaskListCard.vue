@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { NPopconfirm, NText } from 'naive-ui'
-import type { HistoryRecord } from '../../../shared/history-storage'
-import { formatHistoryTime } from '../../../shared/history-storage'
+import { type Task, formatTaskTime } from '../../../shared/task-db'
 
 defineProps<{
-  records: HistoryRecord[]
+  tasks: Task[]
 }>()
 
 const emit = defineEmits<{
@@ -14,50 +13,50 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="history-list">
-    <div class="history-list-header">
-      <NText strong class="history-list-title">历史</NText>
-      <span v-if="records.length > 0" class="history-count">{{ records.length }}</span>
+  <div class="task-list">
+    <div class="task-list-header">
+      <NText strong class="task-list-title">历史任务</NText>
+      <span v-if="tasks.length > 0" class="task-count">{{ tasks.length }}</span>
     </div>
 
-    <div v-if="records.length === 0" class="history-empty">
-      <span class="history-empty-icon" aria-hidden="true">📋</span>
-      <NText depth="3" class="history-empty-text">提取后显示在这里</NText>
+    <div v-if="tasks.length === 0" class="task-empty">
+      <span class="task-empty-icon" aria-hidden="true">📋</span>
+      <NText depth="3" class="task-empty-text">提取后显示在这里</NText>
     </div>
 
-    <div v-for="record in records" :key="record.id" class="history-item">
-      <button type="button" class="history-item-main" @click="emit('open', record.id)">
-        <div class="history-item-content">
-          <NText strong class="history-item-title">
-            {{ record.note.title || '（无标题）' }}
+    <div v-for="task in tasks" :key="task.id" class="task-item">
+      <button type="button" class="task-item-main" @click="emit('open', task.id)">
+        <div class="task-item-content">
+          <NText strong class="task-item-title">
+            {{ task.note.title || '（无标题）' }}
           </NText>
-          <div class="history-item-meta">
-            <span>{{ record.note.author || '未知作者' }}</span>
+          <div class="task-item-meta">
+            <span>{{ task.note.author || '未知作者' }}</span>
             <span class="meta-dot" aria-hidden="true">·</span>
-            <span>{{ formatHistoryTime(record.extractedAt) }}</span>
-            <span v-if="record.noteType === 'video'" class="meta-tag">视频</span>
+            <span>{{ formatTaskTime(task.extractedAt) }}</span>
+            <span v-if="task.noteType === 'video'" class="meta-tag">视频</span>
           </div>
-          <div class="history-pipeline" aria-label="进度">
+          <div class="task-pipeline" aria-label="进度">
             <span class="pipe-step pipe-step--done" title="已提取">提取</span>
-            <span class="pipe-line" :class="{ 'pipe-line--done': record.analysis }" />
+            <span class="pipe-line" :class="{ 'pipe-line--done': task.analysis }" />
             <span
               class="pipe-step"
-              :class="{ 'pipe-step--done': record.analysis }"
+              :class="{ 'pipe-step--done': task.analysis }"
               title="AI 分析"
             >
               分析
             </span>
-            <span class="pipe-line" :class="{ 'pipe-line--done': record.draft }" />
+            <span class="pipe-line" :class="{ 'pipe-line--done': task.draft }" />
             <span
               class="pipe-step"
-              :class="{ 'pipe-step--done': record.draft }"
+              :class="{ 'pipe-step--done': task.draft }"
               title="类似笔记"
             >
               生成
             </span>
           </div>
         </div>
-        <svg class="history-chevron" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+        <svg class="task-chevron" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
           <path d="M6 4l4 4-4 4V4z" />
         </svg>
       </button>
@@ -65,13 +64,13 @@ const emit = defineEmits<{
       <NPopconfirm
         positive-text="删除"
         negative-text="取消"
-        @positive-click="emit('delete', record.id)"
+        @positive-click="emit('delete', task.id)"
       >
         <template #trigger>
           <button
             type="button"
-            class="history-delete"
-            aria-label="删除记录"
+            class="task-delete"
+            aria-label="删除任务"
             @click.stop
           >
             <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
@@ -81,14 +80,14 @@ const emit = defineEmits<{
             </svg>
           </button>
         </template>
-        确定删除这条记录？分析结果与生成内容将一并删除。
+        确定删除这条任务？分析结果与生成内容将一并删除。
       </NPopconfirm>
     </div>
   </div>
 </template>
 
 <style scoped>
-.history-list {
+.task-list {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -96,18 +95,18 @@ const emit = defineEmits<{
   min-height: 0;
 }
 
-.history-list-header {
+.task-list-header {
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 0 2px;
 }
 
-.history-list-title {
+.task-list-title {
   font-size: 13px;
 }
 
-.history-count {
+.task-count {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -121,7 +120,7 @@ const emit = defineEmits<{
   color: #86909c;
 }
 
-.history-empty {
+.task-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -132,16 +131,16 @@ const emit = defineEmits<{
   background: #fafbfc;
 }
 
-.history-empty-icon {
+.task-empty-icon {
   font-size: 24px;
   opacity: 0.5;
 }
 
-.history-empty-text {
+.task-empty-text {
   font-size: 12px;
 }
 
-.history-item {
+.task-item {
   display: flex;
   align-items: stretch;
   gap: 4px;
@@ -152,12 +151,12 @@ const emit = defineEmits<{
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.history-item:hover {
+.task-item:hover {
   border-color: #ffb3c0;
   box-shadow: 0 2px 10px rgba(255, 36, 66, 0.1);
 }
 
-.history-item-main {
+.task-item-main {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -170,7 +169,7 @@ const emit = defineEmits<{
   text-align: left;
 }
 
-.history-item-content {
+.task-item-content {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -178,7 +177,7 @@ const emit = defineEmits<{
   gap: 4px;
 }
 
-.history-item-title {
+.task-item-title {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -188,7 +187,7 @@ const emit = defineEmits<{
   color: #1d2129;
 }
 
-.history-item-meta {
+.task-item-meta {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -210,7 +209,7 @@ const emit = defineEmits<{
   font-weight: 500;
 }
 
-.history-pipeline {
+.task-pipeline {
   display: flex;
   align-items: center;
   gap: 0;
@@ -242,7 +241,7 @@ const emit = defineEmits<{
   background: #ffb3c0;
 }
 
-.history-chevron {
+.task-chevron {
   flex-shrink: 0;
   width: 16px;
   height: 16px;
@@ -250,11 +249,11 @@ const emit = defineEmits<{
   transition: color 0.15s ease;
 }
 
-.history-item:hover .history-chevron {
+.task-item:hover .task-chevron {
   color: #ff2442;
 }
 
-.history-delete {
+.task-delete {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
@@ -270,12 +269,12 @@ const emit = defineEmits<{
   transition: color 0.15s ease, background 0.15s ease;
 }
 
-.history-delete:hover {
+.task-delete:hover {
   color: #f53f3f;
   background: #fff1f0;
 }
 
-.history-delete svg {
+.task-delete svg {
   width: 15px;
   height: 15px;
 }

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { NText } from 'naive-ui'
 import { APP_NAME, APP_TAGLINE } from '../shared/brand'
-import SettingsPanel from '../popup/components/settings/SettingsPanel.vue'
+import SettingsPanel from '../popup/pages/settings/SettingsPanel.vue'
 </script>
 
 <template>
