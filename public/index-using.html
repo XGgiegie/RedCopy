@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>宣传图生成</title>
+    <style>
+      :root {
+        --brand: #ff2442;
+        --brand-soft: #fff1f0;
+        --brand-mid: #ffb3c0;
+        --text: #1d2129;
+        --text-2: #4e5969;
+        --text-3: #86909c;
+        --bg: #f5f6f8;
+        --line: #eef0f4;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        min-height: 100vh;
+        font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei',
+          'Helvetica Neue', sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        padding: 24px;
+      }
+
+      .page-header {
+        max-width: 1280px;
+        margin: 0 auto 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+      }
+
+      .page-title {
+        font-size: 18px;
+        font-weight: 700;
+      }
+
+      .page-subtitle {
+        margin-top: 4px;
+        font-size: 13px;
+        color: var(--text-3);
+      }
+
+      .toolbar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .btn {
+        appearance: none;
+        border: none;
+        border-radius: 8px;
+        padding: 10px 18px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+      }
+
+      .btn:active {
+        transform: scale(0.98);
+      }
+
+      .btn-primary {
+        background: var(--brand);
+        color: #fff;
+        box-shadow: 0 4px 14px rgba(255, 36, 66, 0.28);
+      }
+
+      .btn-primary:hover {
+        box-shadow: 0 6px 18px rgba(255, 36, 66, 0.34);
+      }
+
+      .btn-primary:disabled {
+        opacity: 0.65;
+        cursor: wait;
+      }
+
+      .btn-ghost {
+        background: #fff;
+        color: var(--text-2);
+        border: 1px solid var(--line);
+      }
+
+      .hint {
+        font-size: 12px;
+        color: var(--text-3);
+      }
+
+      .canvas-wrap {
+        max-width: 1280px;
+        margin: 0 auto;
+        padding: 12px;
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        box-shadow: 0 8px 28px rgba(29, 33, 41, 0.08);
+      }
+
+      .canvas-label {
+        margin-bottom: 10px;
+        font-size: 12px;
+        color: var(--text-3);
+        text-align: center;
+      }
+
+      #promo-canvas {
+        width: 1280px;
+        height: 800px;
+        overflow: hidden;
+        position: relative;
+        background: linear-gradient(135deg, #fffafb 0%, #ffffff 42%, #fff5f7 100%);
+      }
+
+      .promo-inner {
+        width: 100%;
+        height: 100%;
+        padding: 56px 64px;
+        display: grid;
+        grid-template-columns: 1.05fr 0.95fr;
+        gap: 48px;
+        position: relative;
+      }
+
+      .promo-bg-dot {
+        position: absolute;
+        border-radius: 50%;
+        pointer-events: none;
+      }
+
+      .dot-1 {
+        width: 280px;
+        height: 280px;
+        top: -80px;
+        right: 120px;
+        background: radial-gradient(circle, rgba(255, 36, 66, 0.12) 0%, transparent 70%);
+      }
+
+      .dot-2 {
+        width: 220px;
+        height: 220px;
+        bottom: -60px;
+        left: 80px;
+        background: radial-gradient(circle, rgba(255, 179, 192, 0.35) 0%, transparent 72%);
+      }
+
+      .brand-row {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        margin-bottom: 28px;
+      }
+
+      .brand-icon {
+        width: 72px;
+        height: 72px;
+        border-radius: 18px;
+        background: var(--brand);
+        object-fit: cover;
+        box-shadow: 0 10px 24px rgba(255, 36, 66, 0.28);
+        flex-shrink: 0;
+      }
+
+      .brand-icon-fallback {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-size: 38px;
+        font-weight: 700;
+      }
+
+      .brand-name {
+        font-size: 52px;
+        font-weight: 800;
+        letter-spacing: 1px;
+        line-height: 1.1;
+        color: var(--text);
+      }
+
+      .brand-tagline {
+        margin-top: 8px;
+        font-size: 22px;
+        color: var(--text-2);
+        line-height: 1.4;
+      }
+
+      .hero-desc {
+        margin-top: 24px;
+        font-size: 18px;
+        line-height: 1.7;
+        color: var(--text-2);
+        max-width: 520px;
+      }
+
+      .feature-grid {
+        margin-top: 34px;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .feature-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 14px 16px;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.86);
+        border: 1px solid var(--line);
+      }
+
+      .feature-icon {
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        background: var(--brand-soft);
+        color: var(--brand);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+        flex-shrink: 0;
+      }
+
+      .feature-title {
+        font-size: 16px;
+        font-weight: 700;
+        color: var(--text);
+        line-height: 1.3;
+      }
+
+      .feature-desc {
+        margin-top: 4px;
+        font-size: 13px;
+        color: var(--text-3);
+        line-height: 1.45;
+      }
+
+      .badge-row {
+        margin-top: 28px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .badge {
+        padding: 7px 14px;
+        border-radius: 999px;
+        font-size: 13px;
+        font-weight: 600;
+        background: #fff;
+        border: 1px solid var(--line);
+        color: var(--text-2);
+      }
+
+      .badge-brand {
+        background: var(--brand);
+        border-color: var(--brand);
+        color: #fff;
+      }
+
+      .mock-panel {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+
+      .mock-browser {
+        border-radius: 18px;
+        overflow: hidden;
+        border: 1px solid #e5e6eb;
+        box-shadow: 0 18px 40px rgba(29, 33, 41, 0.12);
+        background: #fff;
+      }
+
+      .mock-toolbar {
+        height: 38px;
+        background: #f7f8fa;
+        border-bottom: 1px solid #eef0f4;
+        display: flex;
+        align-items: center;
+        padding: 0 14px;
+        gap: 8px;
+      }
+
+      .mock-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #e5e6eb;
+      }
+
+      .mock-dot.red {
+        background: #ff6b6b;
+      }
+      .mock-dot.yellow {
+        background: #ffd666;
+      }
+      .mock-dot.green {
+        background: #95de64;
+      }
+
+      .mock-url {
+        margin-left: 8px;
+        flex: 1;
+        height: 24px;
+        border-radius: 6px;
+        background: #fff;
+        border: 1px solid #eef0f4;
+        display: flex;
+        align-items: center;
+        padding: 0 10px;
+        font-size: 11px;
+        color: var(--text-3);
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+
+      .mock-body {
+        display: grid;
+        grid-template-columns: 1fr 300px;
+        min-height: 430px;
+      }
+
+      .mock-page {
+        padding: 22px;
+        background: linear-gradient(180deg, #fff 0%, #fafbfc 100%);
+        border-right: 1px solid #eef0f4;
+      }
+
+      .mock-note-title {
+        font-size: 18px;
+        font-weight: 700;
+        line-height: 1.4;
+        margin-bottom: 10px;
+      }
+
+      .mock-note-meta {
+        font-size: 11px;
+        color: var(--text-3);
+        margin-bottom: 14px;
+      }
+
+      .mock-note-line {
+        height: 10px;
+        border-radius: 5px;
+        background: #f2f3f5;
+        margin-bottom: 8px;
+      }
+
+      .mock-note-line.w-90 {
+        width: 90%;
+      }
+      .mock-note-line.w-75 {
+        width: 75%;
+      }
+      .mock-note-line.w-60 {
+        width: 60%;
+      }
+
+      .mock-images {
+        margin-top: 16px;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+      }
+
+      .mock-image {
+        aspect-ratio: 1;
+        border-radius: 8px;
+        background: linear-gradient(135deg, #ffe8ec, #ffd6dc);
+        border: 1px solid #ffd6dc;
+      }
+
+      .mock-side {
+        background: #fff;
+        padding: 14px 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .mock-side-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .mock-side-title {
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      .mock-side-btn {
+        width: 24px;
+        height: 24px;
+        border-radius: 6px;
+        background: #f7f8fa;
+        border: 1px solid #eef0f4;
+      }
+
+      .mock-side-card {
+        padding: 10px;
+        border-radius: 10px;
+        border: 1px solid #eef0f4;
+        background: #fafbfc;
+      }
+
+      .mock-side-card-title {
+        font-size: 12px;
+        font-weight: 700;
+        margin-bottom: 6px;
+      }
+
+      .mock-pipeline {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        margin-top: 8px;
+        font-size: 10px;
+      }
+
+      .mock-step {
+        color: var(--brand);
+        font-weight: 600;
+      }
+
+      .mock-step-muted {
+        color: #c9cdd4;
+      }
+
+      .mock-line {
+        width: 16px;
+        height: 2px;
+        background: var(--brand-mid);
+        border-radius: 1px;
+      }
+
+      .mock-primary-btn {
+        margin-top: 8px;
+        height: 32px;
+        border-radius: 8px;
+        background: var(--brand);
+        color: #fff;
+        font-size: 12px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .mock-secondary-btn {
+        margin-top: 6px;
+        height: 28px;
+        border-radius: 8px;
+        background: #fff;
+        border: 1px solid #eef0f4;
+        color: var(--text-2);
+        font-size: 11px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .promo-footer {
+        position: absolute;
+        left: 64px;
+        right: 64px;
+        bottom: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 13px;
+        color: var(--text-3);
+      }
+
+      .promo-footer strong {
+        color: var(--brand);
+        font-weight: 700;
+      }
+
+      .preview-box {
+        max-width: 1280px;
+        margin: 16px auto 0;
+        text-align: center;
+      }
+
+      .preview-box img {
+        max-width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        box-shadow: 0 4px 16px rgba(29, 33, 41, 0.08);
+      }
+
+      @media (max-width: 1320px) {
+        .canvas-wrap {
+          overflow-x: auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="page-header">
+      <div>
+        <div class="page-title" id="pageTitle">宣传图生成</div>
+        <div class="page-subtitle">
+          画布固定 1280×800 · 内容自动读取 manifest，无需随版本或模型反复修改
+        </div>
+      </div>
+      <div class="toolbar">
+        <span class="hint">npm run dev 后打开本页</span>
+        <button id="captureBtn" class="btn btn-primary" type="button">
+          一键截图 1280×800
+        </button>
+        <button id="previewBtn" class="btn btn-ghost" type="button">预览截图</button>
+      </div>
+    </header>
+
+    <div class="canvas-wrap">
+      <div class="canvas-label">截图区域（1280 × 800 px）</div>
+      <div id="promo-canvas">
+        <div class="promo-inner">
+          <div class="promo-bg-dot dot-1" aria-hidden="true"></div>
+          <div class="promo-bg-dot dot-2" aria-hidden="true"></div>
+
+          <section id="promo-left"></section>
+          <section class="mock-panel" id="promo-mock"></section>
+
+          <footer class="promo-footer" id="promo-footer"></footer>
+        </div>
+      </div>
+    </div>
+
+    <div class="preview-box" id="previewBox" hidden>
+      <p class="hint" style="margin-bottom: 8px">截图预览</p>
+      <img id="previewImg" alt="宣传图预览" />
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script>
+      const CAPTURE_WIDTH = 1280
+      const CAPTURE_HEIGHT = 800
+
+      /**
+       * 通用能力描述：只写产品层价值，不写具体模型/供应商，后续接入新模型无需改此页。
+       */
+      const PROMO_CAPABILITIES = [
+        {
+          icon: '📋',
+          title: '笔记提取',
+          desc: '图文内容一键整理，支持复制与导出',
+        },
+        {
+          icon: '🧠',
+          title: 'AI 智能分析',
+          desc: '读懂内容结构与传播逻辑，辅助创作决策',
+        },
+        {
+          icon: '✍️',
+          title: '内容创作',
+          desc: '仿写草稿可编辑，多任务独立管理',
+        },
+        {
+          icon: '✨',
+          title: 'AI 增强能力',
+          desc: '分析、生成、配图等能力可持续扩展',
+        },
+      ]
+
+      const PROMO_BADGES = ['浏览器扩展', '本机存储', '隐私安全', 'AI 增强']
+
+      /** 产品主流程（与具体模型无关） */
+      const WORKFLOW_STEPS = ['提取', '分析', '创作']
+
+      const FALLBACK_MANIFEST = {
+        name: '薯薯小抄',
+        description: '一键提取小红书图文笔记，复制 Markdown，AI 帮你读懂爆款笔记',
+        version: '',
+      }
+
+      let appName = FALLBACK_MANIFEST.name
+
+      const captureBtn = document.getElementById('captureBtn')
+      const previewBtn = document.getElementById('previewBtn')
+      const promoCanvas = document.getElementById('promo-canvas')
+      const previewBox = document.getElementById('previewBox')
+      const previewImg = document.getElementById('previewImg')
+
+      function escapeHtml(value) {
+        return String(value)
+          .replaceAll('&', '&amp;')
+          .replaceAll('<', '&lt;')
+          .replaceAll('>', '&gt;')
+          .replaceAll('"', '&quot;')
+      }
+
+      function iconFallbackChar(name) {
+        const trimmed = String(name).trim()
+        return trimmed ? trimmed.slice(-1) : '抄'
+      }
+
+      async function loadManifest() {
+        try {
+          const response = await fetch('/manifest.json', { cache: 'no-store' })
+          if (!response.ok) return { ...FALLBACK_MANIFEST }
+          const data = await response.json()
+          return {
+            name: data.name || FALLBACK_MANIFEST.name,
+            description: data.description || FALLBACK_MANIFEST.description,
+            version: data.version || '',
+          }
+        } catch (error) {
+          console.warn('[RedCopy] 读取 manifest 失败，使用内置默认值', error)
+          return { ...FALLBACK_MANIFEST }
+        }
+      }
+
+      function renderPromo(manifest) {
+        appName = manifest.name
+        const tagline = '小红书笔记提取与 AI 创作助手'
+        const heroDesc =
+          `${manifest.description}。数据仅存浏览器本地，扩展免费；AI 能力由用户自备 Key 按需启用，支持后续扩展更多模型。`
+
+        document.title = `${manifest.name} · 宣传图生成`
+        document.getElementById('pageTitle').textContent = `${manifest.name} · 宣传图生成`
+
+        const featureHtml = PROMO_CAPABILITIES.map(
+          (item) => `
+            <div class="feature-item">
+              <div class="feature-icon">${item.icon}</div>
+              <div>
+                <div class="feature-title">${escapeHtml(item.title)}</div>
+                <div class="feature-desc">${escapeHtml(item.desc)}</div>
+              </div>
+            </div>
+          `,
+        ).join('')
+
+        const badgeHtml = PROMO_BADGES.map((text, index) => {
+          const cls = index === 0 ? 'badge badge-brand' : 'badge'
+          return `<span class="${cls}">${escapeHtml(text)}</span>`
+        }).join('')
+
+        document.getElementById('promo-left').innerHTML = `
+          <div class="brand-row">
+            <img class="brand-icon" id="promoBrandIcon" src="/icons/icon-128.png" alt="" />
+            <div>
+              <h1 class="brand-name">${escapeHtml(manifest.name)}</h1>
+              <p class="brand-tagline">${escapeHtml(tagline)}</p>
+            </div>
+          </div>
+          <p class="hero-desc">${escapeHtml(heroDesc)}</p>
+          <div class="feature-grid">${featureHtml}</div>
+          <div class="badge-row">${badgeHtml}</div>
+        `
+
+        const brandIcon = document.getElementById('promoBrandIcon')
+        if (brandIcon) {
+          brandIcon.addEventListener(
+            'error',
+            () => {
+              const fallback = document.createElement('div')
+              fallback.className = 'brand-icon brand-icon-fallback'
+              fallback.textContent = iconFallbackChar(manifest.name)
+              brandIcon.replaceWith(fallback)
+            },
+            { once: true },
+          )
+        }
+
+        const [step1, step2, step3] = WORKFLOW_STEPS
+        document.getElementById('promo-mock').innerHTML = `
+          <div class="mock-browser">
+            <div class="mock-toolbar">
+              <span class="mock-dot red"></span>
+              <span class="mock-dot yellow"></span>
+              <span class="mock-dot green"></span>
+              <div class="mock-url">xiaohongshu.com/explore/...</div>
+            </div>
+            <div class="mock-body">
+              <div class="mock-page">
+                <div class="mock-note-title">笔记标题示例</div>
+                <div class="mock-note-meta">@作者 · 互动数据</div>
+                <div class="mock-note-line w-90"></div>
+                <div class="mock-note-line w-75"></div>
+                <div class="mock-note-line w-60"></div>
+                <div class="mock-images">
+                  <div class="mock-image"></div>
+                  <div class="mock-image"></div>
+                  <div class="mock-image"></div>
+                </div>
+              </div>
+              <aside class="mock-side">
+                <div class="mock-side-header">
+                  <div class="mock-side-title">${escapeHtml(manifest.name)}</div>
+                  <div class="mock-side-btn"></div>
+                </div>
+                <div class="mock-side-card">
+                  <div class="mock-side-card-title">任务示例</div>
+                  <div class="mock-pipeline">
+                    <span class="mock-step">${escapeHtml(step1)}</span>
+                    <span class="mock-line"></span>
+                    <span class="mock-step">${escapeHtml(step2)}</span>
+                    <span class="mock-line"></span>
+                    <span class="mock-step-muted">${escapeHtml(step3)}</span>
+                  </div>
+                </div>
+                <div class="mock-primary-btn">AI 分析</div>
+                <div class="mock-secondary-btn">复制 / 导出</div>
+                <div class="mock-secondary-btn">继续创作</div>
+              </aside>
+            </div>
+          </div>
+        `
+
+        const versionText = manifest.version ? `v${manifest.version}` : '最新版'
+        document.getElementById('promo-footer').innerHTML = `
+          <span>适用于 Chrome · Edge 等 Chromium 浏览器</span>
+          <span>扩展免费 · <strong>${escapeHtml(versionText)}</strong></span>
+        `
+      }
+
+      async function capturePromoImage(download = true) {
+        if (typeof html2canvas !== 'function') {
+          alert('截图库加载失败，请检查网络后刷新页面重试')
+          return null
+        }
+
+        captureBtn.disabled = true
+        captureBtn.textContent = '正在生成…'
+
+        try {
+          const canvas = await html2canvas(promoCanvas, {
+            backgroundColor: null,
+            width: CAPTURE_WIDTH,
+            height: CAPTURE_HEIGHT,
+            scale: 1,
+            useCORS: true,
+            logging: false,
+          })
+
+          if (canvas.width !== CAPTURE_WIDTH || canvas.height !== CAPTURE_HEIGHT) {
+            const fixed = document.createElement('canvas')
+            fixed.width = CAPTURE_WIDTH
+            fixed.height = CAPTURE_HEIGHT
+            const ctx = fixed.getContext('2d')
+            ctx.drawImage(canvas, 0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT)
+            return finalizeCanvas(fixed, download)
+          }
+
+          return finalizeCanvas(canvas, download)
+        } catch (error) {
+          console.error('[RedCopy] 宣传图截图失败', error)
+          alert('截图失败：' + (error?.message || String(error)))
+          return null
+        } finally {
+          captureBtn.disabled = false
+          captureBtn.textContent = '一键截图 1280×800'
+        }
+      }
+
+      function finalizeCanvas(canvas, download) {
+        const dataUrl = canvas.toDataURL('image/png')
+        previewImg.src = dataUrl
+        previewBox.hidden = false
+
+        if (download) {
+          const link = document.createElement('a')
+          link.download = `${appName}-宣传图-1280x800.png`
+          link.href = dataUrl
+          link.click()
+        }
+
+        console.info('[RedCopy] 宣传图已生成', {
+          width: canvas.width,
+          height: canvas.height,
+        })
+        return dataUrl
+      }
+
+      captureBtn.addEventListener('click', () => {
+        void capturePromoImage(true)
+      })
+
+      previewBtn.addEventListener('click', () => {
+        void capturePromoImage(false)
+      })
+
+      void (async () => {
+        const manifest = await loadManifest()
+        renderPromo(manifest)
+      })()
+    </script>
+  </body>
+</html>
