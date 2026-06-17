@@ -61,6 +61,15 @@ export function injectExtractNote(
     images: [],
   }
 
+  function normalizeImageUrl(value: unknown): string | null {
+    if (typeof value !== 'string') return null
+    const trimmed = value.trim().replace(/&amp;/g, '&')
+    if (!trimmed) return null
+    if (trimmed.startsWith('//')) return `${location.protocol === 'http:' ? 'http:' : 'https:'}${trimmed}`
+    if (/^https?:\/\//i.test(trimmed)) return trimmed
+    return null
+  }
+
   function parseImageUrls(note: Record<string, unknown>): string[] {
     const imageList = note.imageList
     if (!Array.isArray(imageList)) return []
@@ -68,19 +77,24 @@ export function injectExtractNote(
     const urls: string[] = []
     for (const img of imageList) {
       const item = img as Record<string, unknown>
-      if (typeof item.urlDefault === 'string' && item.urlDefault) {
-        urls.push(item.urlDefault)
+      const urlDefault = normalizeImageUrl(item.urlDefault)
+      if (urlDefault) {
+        urls.push(urlDefault)
         continue
       }
-      if (typeof item.url === 'string' && item.url) {
-        urls.push(item.url)
+      const url = normalizeImageUrl(item.url)
+      if (url) {
+        urls.push(url)
         continue
       }
       const infoList = item.infoList
       if (Array.isArray(infoList) && infoList.length > 0) {
-        const first = infoList[0] as Record<string, unknown>
-        if (typeof first.url === 'string' && first.url) {
-          urls.push(first.url)
+        for (const info of infoList) {
+          const infoUrl = normalizeImageUrl((info as Record<string, unknown>).url)
+          if (infoUrl) {
+            urls.push(infoUrl)
+            break
+          }
         }
       }
     }
@@ -93,8 +107,19 @@ export function injectExtractNote(
         '.swiper-slide img, .note-slider img, [class*="carousel"] img, [class*="slide"] img, .img-container img',
       ),
     ]
-      .map((el) => (el as HTMLImageElement).src)
-      .filter((src) => src.startsWith('http') && !/avatar|icon/i.test(src))
+      .map((el) => {
+        const img = el as HTMLImageElement
+        return normalizeImageUrl(
+          img.currentSrc
+          || img.src
+          || img.getAttribute('data-src')
+          || img.getAttribute('data-original'),
+        )
+      })
+      .filter(
+        (src): src is string =>
+          typeof src === 'string' && !/avatar|icon/i.test(src),
+      )
 
     return [...new Set(urls)]
   }

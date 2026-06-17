@@ -2,6 +2,12 @@ import type { DraftImagePrompt, GeneratedNoteDraft } from './ai-types'
 import { createImagePromptId, normalizeImagePrompts } from './draft-image'
 import { parseLlmJsonObject } from './parse-llm-json'
 
+export const DRAFT_TITLE_MAX_LENGTH = 20
+
+export function limitDraftTitle(title: string): string {
+  return Array.from(title.trim()).slice(0, DRAFT_TITLE_MAX_LENGTH).join('')
+}
+
 function asString(value: unknown): string | undefined {
   if (typeof value === 'string') return value
   if (value == null) return undefined
@@ -44,7 +50,7 @@ export function parseGeneratedDraft(content: string): GeneratedNoteDraft {
   const parsed = parseLlmJsonObject(trimmed)
 
   if (parsed) {
-    const title = asString(parsed.title)?.trim()
+    const title = limitDraftTitle(asString(parsed.title) ?? '')
     const body = asString(parsed.body)?.trim()
 
     if (title && body) {
@@ -86,14 +92,15 @@ export function normalizeGeneratedDraft(draft: GeneratedNoteDraft): GeneratedNot
     draft.title === '（生成结果）' ||
     (source.startsWith('{') && source.includes('"title"') && source.includes('"body"'))
 
-  const base = looksLikeUnparsedJson
-    ? parseGeneratedDraft(source).title !== '（生成结果）'
-      ? parseGeneratedDraft(source)
-      : draft
-    : draft
+  let base = draft
+  if (looksLikeUnparsedJson) {
+    const reparsed = parseGeneratedDraft(source)
+    base = reparsed.title !== '（生成结果）' ? reparsed : draft
+  }
 
   return {
     ...base,
+    title: limitDraftTitle(base.title),
     tags: base.tags ?? [],
     imagePrompts: normalizeImagePrompts(base),
   }

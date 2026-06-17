@@ -8,6 +8,10 @@ import type {
   GeneratedNoteDraft,
 } from '../../../shared/ai-types'
 import { copyTextToClipboard } from '../../../shared/export-markdown'
+import {
+  DRAFT_TITLE_MAX_LENGTH,
+  limitDraftTitle,
+} from '../../../shared/parse-generated-draft'
 import DraftImagePromptList from './DraftImagePromptList.vue'
 import DraftImageHistory from './DraftImageHistory.vue'
 
@@ -80,6 +84,14 @@ function renderCopyableTag(tag: string | DynamicTagsOption, index: number) {
     { default: () => label },
   )
 }
+
+function handleTitleUpdate(value: string) {
+  const limited = limitDraftTitle(value)
+  if (limited !== value) {
+    draft.value.title = limited
+  }
+  emit('edit')
+}
 </script>
 
 <template>
@@ -111,7 +123,8 @@ function renderCopyableTag(tag: string | DynamicTagsOption, index: number) {
       <NInput
         v-model:value="draft.title"
         placeholder="输入标题"
-        @update:value="$emit('edit')"
+        :maxlength="DRAFT_TITLE_MAX_LENGTH"
+        @update:value="handleTitleUpdate"
       />
     </div>
 
@@ -179,14 +192,33 @@ function renderCopyableTag(tag: string | DynamicTagsOption, index: number) {
 
 .copyable-tags :deep(.copyable-dynamic-tag) {
   cursor: pointer;
-  border-color: #ffd4d4;
+  --n-border: 1px solid #ff2442 !important;
+  --n-border-hover: 1px solid #ff2442 !important;
+  --n-border-checked: 1px solid #ff2442 !important;
+  --n-text-color: #ff2442 !important;
+  --n-close-icon-color: #ff2442 !important;
+  --n-close-icon-color-hover: #e60028 !important;
+  --n-close-color-hover: rgba(255, 36, 66, 0.12) !important;
+  border-color: #ff2442;
   background: #fff7f7;
   color: #ff2442;
 }
 
 .copyable-tags :deep(.copyable-dynamic-tag:hover) {
   background: #fff1f0;
-  border-color: #ff9ea8;
+  border-color: #ff2442;
+}
+
+.copyable-tags :deep(.copyable-dynamic-tag .n-tag__border) {
+  border-color: #ff2442 !important;
+}
+
+.copyable-tags :deep(.copyable-dynamic-tag .n-tag__close) {
+  color: #ff2442 !important;
+}
+
+.copyable-tags :deep(.copyable-dynamic-tag .n-tag__close:hover) {
+  color: #e60028 !important;
 }
 
 .copyable-tags :deep(.copyable-dynamic-tag .n-tag__content) {
