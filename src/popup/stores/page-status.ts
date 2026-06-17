@@ -15,17 +15,20 @@ export const usePageStatusStore = defineStore('pageStatus', () => {
   let watchingTabId: number | undefined
   let started = false
 
-  const level = computed<PageStatusLevel>(() => {
-    if (isNotePage.value) return 'ready'
-    if (isXhsPage.value) return 'warn'
+  /** 标题栏页面标签层级 */
+  const tagLevel = computed<PageStatusLevel>(() => {
+    if (isXhsPage.value) return 'ready'
     return 'idle'
   })
 
-  /** 标题栏标签短文案 */
-  const label = computed(() => {
-    if (level.value === 'ready') return '笔记页'
-    if (level.value === 'warn') return '非笔记页'
-    return '未在小红书'
+  /** 标题栏页面标签短文案 */
+  const tagLabel = computed(() => (isXhsPage.value ? '小红书' : '未在小红书'))
+
+  /** 标题栏页面标签悬停说明 */
+  const tagTooltip = computed(() => {
+    if (!isXhsPage.value) return '请切换到小红书网站'
+    if (isNotePage.value) return '当前在笔记详情页，可直接提取'
+    return '当前在小红书站内，进入笔记详情页后可提取'
   })
 
   function applyPageUrl(url: string) {
@@ -94,8 +97,11 @@ export const usePageStatusStore = defineStore('pageStatus', () => {
   return {
     isXhsPage,
     isNotePage,
-    level,
-    label,
+    level: tagLevel,
+    label: tagLabel,
+    tagLevel,
+    tagLabel,
+    tagTooltip,
     start,
     stop,
     syncActiveTab,

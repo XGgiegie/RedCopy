@@ -9,7 +9,7 @@ function goBack() {
     router.back()
     return
   }
-  void router.push('/')
+  void router.push('/analysis')
 }
 </script>
 

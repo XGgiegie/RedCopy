@@ -1,4 +1,5 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
+import GrowthPage from './pages/growth/GrowthPage.vue'
 import ListPage from './pages/list/ListPage.vue'
 import SettingsView from './pages/settings/SettingsView.vue'
 import TaskPage from './pages/task/TaskPage.vue'
@@ -12,8 +13,17 @@ export const router = createRouter({
   routes: [
     {
       path: '/',
-      name: 'list',
+      redirect: '/analysis',
+    },
+    {
+      path: '/analysis',
+      name: 'analysis',
       component: ListPage,
+    },
+    {
+      path: '/growth',
+      name: 'growth',
+      component: GrowthPage,
     },
     {
       path: '/task/:id',
@@ -28,7 +38,7 @@ export const router = createRouter({
     },
     {
       path: '/:pathMatch(.*)*',
-      redirect: '/',
+      redirect: '/analysis',
     },
   ],
 })

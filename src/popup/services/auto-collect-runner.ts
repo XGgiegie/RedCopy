@@ -171,6 +171,7 @@ async function processOneCard(
         url: extract.url,
         note: extract.text,
         noteType: extract.noteType,
+        source: 'manual',
       })
       outcome = 'saved'
       console.info('[RedCopy] 自动采集已入库', { noteId: extract.noteId, index: card.index })

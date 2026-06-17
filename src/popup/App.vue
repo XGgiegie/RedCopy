@@ -4,13 +4,19 @@ import { useRoute, useRouter } from 'vue-router'
 import { NTooltip } from 'naive-ui'
 import { APP_NAME } from '../shared/brand'
 import AppFooter from './components/AppFooter.vue'
+import ModuleTabs from './components/ModuleTabs.vue'
 import { usePageStatusStore } from './stores/page-status'
+import { useXhsLoginStore } from './stores/xhs-login'
 
 const route = useRoute()
 const router = useRouter()
 const pageStatus = usePageStatusStore()
+const xhsLogin = useXhsLoginStore()
 
-const isHome = computed(() => route.name === 'list')
+const isModuleHome = computed(
+  () => route.name === 'analysis' || route.name === 'growth',
+)
+const showModuleTabs = computed(() => isModuleHome.value)
 const isSettings = computed(() => route.name === 'settings')
 
 const headerTitle = computed(() => {
@@ -24,7 +30,7 @@ function goBack() {
     router.back()
     return
   }
-  void router.push('/')
+  void router.push('/analysis')
 }
 
 function openSettings() {
@@ -33,10 +39,12 @@ function openSettings() {
 
 onMounted(() => {
   pageStatus.start()
+  xhsLogin.start()
 })
 
 onUnmounted(() => {
   pageStatus.stop()
+  xhsLogin.stop()
 })
 </script>
 
@@ -45,7 +53,7 @@ onUnmounted(() => {
     <header class="app-header">
       <div class="app-header-left">
         <button
-          v-if="!isHome"
+          v-if="!isModuleHome"
           type="button"
           class="back-btn"
           aria-label="返回"
@@ -56,24 +64,35 @@ onUnmounted(() => {
           </svg>
         </button>
 
-        <template v-if="isHome">
+        <template v-if="isModuleHome">
           <span class="brand-mark" aria-hidden="true">🍠</span>
           <span class="brand-name">{{ APP_NAME }}</span>
-          <NTooltip trigger="hover" placement="bottom">
-            <template #trigger>
-              <span class="status-tag" :class="`status-tag--${pageStatus.level}`">
-                <span class="status-tag-dot" aria-hidden="true" />
-                {{ pageStatus.label }}
-              </span>
-            </template>
-            {{
-              pageStatus.level === 'ready'
-                ? '已检测到小红书笔记详情页，可直接提取'
-                : pageStatus.level === 'warn'
-                  ? '当前在小红书站内，请进入一篇笔记详情页'
-                  : '请切换到小红书笔记详情页'
-            }}
-          </NTooltip>
+          <div class="status-tags">
+            <NTooltip trigger="hover" placement="bottom">
+              <template #trigger>
+                <span
+                  class="status-tag"
+                  :class="`status-tag--${pageStatus.tagLevel}`"
+                >
+                  <span class="status-tag-dot" aria-hidden="true" />
+                  {{ pageStatus.tagLabel }}
+                </span>
+              </template>
+              {{ pageStatus.tagTooltip }}
+            </NTooltip>
+            <NTooltip trigger="hover" placement="bottom">
+              <template #trigger>
+                <span
+                  class="status-tag"
+                  :class="`status-tag--${xhsLogin.tagLevel}`"
+                >
+                  <span class="status-tag-dot" aria-hidden="true" />
+                  {{ xhsLogin.tagLabel }}
+                </span>
+              </template>
+              {{ xhsLogin.tagTooltip }}
+            </NTooltip>
+          </div>
         </template>
         <span v-else class="header-title">{{ headerTitle }}</span>
       </div>
@@ -91,6 +110,8 @@ onUnmounted(() => {
         </svg>
       </button>
     </header>
+
+    <ModuleTabs v-if="showModuleTabs" />
 
     <main class="app-body">
       <div class="app-body-inner">
@@ -136,6 +157,7 @@ onUnmounted(() => {
 .brand-mark {
   font-size: 16px;
   line-height: 1;
+  flex-shrink: 0;
 }
 
 .brand-name {
@@ -143,6 +165,15 @@ onUnmounted(() => {
   font-weight: 700;
   color: #1d2129;
   letter-spacing: -0.02em;
+  flex-shrink: 0;
+}
+
+.status-tags {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .status-tag {

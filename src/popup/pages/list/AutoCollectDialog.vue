@@ -159,7 +159,7 @@ async function startRun() {
     @update:show="emit('update:show', $event)"
   >
     <NText depth="3" class="dialog-hint">
-      将在当前小红书标签页搜索关键词，按点赞/收藏/评论筛选后自动提取入库。每篇笔记打开后停留约 8 秒再关闭，间隔约 2 秒打开下一篇。采集过程中请勿切换标签页。
+      将在当前小红书标签页搜索关键词，按点赞/收藏/评论筛选后自动提取入库到历史任务。每篇笔记打开后停留约 8 秒再关闭。采集过程中请勿切换标签页。
     </NText>
 
     <NForm label-placement="top" :disabled="isRunning" size="small">

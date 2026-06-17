@@ -3,10 +3,20 @@ import { NPopconfirm, NText, NTooltip } from 'naive-ui'
 import { type Task, formatTaskTime } from '../../../shared/task-db'
 import { useTaskOperationsStore } from '../../stores/task-operations'
 
-defineProps<{
-  tasks: Task[]
-  exporting?: boolean
-}>()
+const props = withDefaults(
+  defineProps<{
+    tasks: Task[]
+    exporting?: boolean
+    title?: string
+    emptyText?: string
+    showToolbar?: boolean
+  }>(),
+  {
+    title: '历史任务',
+    emptyText: '提取后显示在这里',
+    showToolbar: true,
+  },
+)
 
 const emit = defineEmits<{
   open: [id: string]
@@ -21,10 +31,10 @@ const taskOps = useTaskOperationsStore()
 <template>
   <div class="task-list">
     <div class="task-list-header">
-      <NText strong class="task-list-title">历史任务</NText>
+      <NText strong class="task-list-title">{{ props.title }}</NText>
       <span v-if="tasks.length > 0" class="task-count">{{ tasks.length }}</span>
 
-      <div class="task-list-tools">
+      <div v-if="props.showToolbar" class="task-list-tools">
         <NTooltip v-if="tasks.length > 0" trigger="hover">
           <template #trigger>
             <button
@@ -77,7 +87,7 @@ const taskOps = useTaskOperationsStore()
 
     <div v-if="tasks.length === 0" class="task-empty">
       <span class="task-empty-icon" aria-hidden="true">📋</span>
-      <NText depth="3" class="task-empty-text">提取后显示在这里</NText>
+      <NText depth="3" class="task-empty-text">{{ props.emptyText }}</NText>
     </div>
 
     <div v-else class="task-list-body">

@@ -10,8 +10,19 @@ import {
   type StorageRemoveResponse,
   type StorageSetResponse,
 } from '../shared/messages'
+import { migratePlainStorageToEncrypted } from '../shared/storage'
 
 console.info('[RedCopy] background ready')
+
+void migratePlainStorageToEncrypted().catch((error: unknown) => {
+  console.error('[RedCopy] 启动时存储加密迁移失败', error)
+})
+
+chrome.runtime.onInstalled.addListener(() => {
+  void migratePlainStorageToEncrypted().catch((error: unknown) => {
+    console.error('[RedCopy] 安装后存储加密迁移失败', error)
+  })
+})
 
 // 点击扩展图标时从浏览器右侧打开侧栏，而非悬浮 Popup
 chrome.sidePanel

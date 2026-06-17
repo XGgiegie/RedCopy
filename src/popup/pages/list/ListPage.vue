@@ -166,7 +166,7 @@ watch(
 watch(
   () => router.currentRoute.value.name,
   (name) => {
-    if (name === 'list') void refreshTasks()
+    if (name === 'analysis') void refreshTasks()
   },
 )
 </script>
@@ -212,7 +212,7 @@ watch(
               自动
             </NButton>
           </template>
-          {{ isXhsPage ? '按关键词搜索并自动筛选提取' : '请先打开小红书网站' }}
+          {{ isXhsPage ? '按关键词搜索并自动筛选入库' : '请先打开小红书网站' }}
         </NTooltip>
       </div>
 

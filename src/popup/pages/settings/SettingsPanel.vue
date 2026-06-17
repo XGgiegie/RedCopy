@@ -19,6 +19,7 @@ import {
   saveAiSettings,
 } from '../../../shared/ai-settings'
 import { DOUBAO_API_KEY_URL } from '../../../shared/brand'
+import { GROWTH_AI_ACTION_LIMIT } from '../../../shared/growth-acquire'
 
 withDefaults(
   defineProps<{
@@ -96,6 +97,26 @@ onMounted(() => {
 
 <template>
   <NSpace vertical :size="12" class="settings-panel">
+    <section class="usage-notice" aria-label="使用说明">
+      <NText strong class="usage-notice-title">使用说明</NText>
+      <ul class="usage-notice-list">
+        <li>
+          火山方舟豆包提供<strong>免费额度</strong>，本扩展不代扣费用；请自行
+          <a
+            class="usage-notice-link"
+            :href="DOUBAO_API_KEY_URL"
+            target="_blank"
+            rel="noreferrer"
+          >申请 ARK API Key</a>
+          并填入下方，AI 调用费用由您的火山账号承担。
+        </li>
+        <li>
+          涨粉自动获客中的 AI 自动评论与 AI 自动回复，每日合计不得超过
+          {{ GROWTH_AI_ACTION_LIMIT }} 次，用完后请改用固定文案或次日再试。
+        </li>
+      </ul>
+    </section>
+
     <section class="capability-section">
       <NText strong class="section-title">火山方舟 · 豆包大模型</NText>
       <NText depth="3" class="section-hint">
@@ -176,6 +197,45 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.settings-panel {
+  width: 100%;
+}
+
+.usage-notice {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fff7e8;
+  border: 1px solid #ffe7ba;
+}
+
+.usage-notice-title {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 6px;
+  color: #1d2129;
+}
+
+.usage-notice-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #4e5969;
+}
+
+.usage-notice-list li + li {
+  margin-top: 6px;
+}
+
+.usage-notice-link {
+  color: #2080f0;
+  text-decoration: none;
+}
+
+.usage-notice-link:hover {
+  text-decoration: underline;
+}
+
 .section-title {
   display: block;
   font-size: 13px;

@@ -512,7 +512,7 @@ async function handleDeleteTask() {
   try {
     await deleteTask(id)
     message.success('已删除任务')
-    void router.push('/')
+    void router.push('/analysis')
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error)
     console.error('[RedCopy] 删除任务失败', { id, detail }, error)
@@ -547,7 +547,7 @@ onUnmounted(() => {
 
     <div v-else-if="!task" class="task-placeholder">
       任务不存在或已被删除
-      <NButton size="small" class="task-placeholder-btn" @click="router.push('/')">
+      <NButton size="small" class="task-placeholder-btn" @click="router.push('/analysis')">
         返回列表
       </NButton>
     </div>

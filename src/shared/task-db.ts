@@ -20,6 +20,9 @@ export const TASK_DB_KEY = 'redcopy:tasks'
 const LEGACY_HISTORY_KEY = 'redcopy:history'
 const MAX_TASKS = 50
 
+/** 任务来源：手动提取 vs 涨粉获客自动采集 */
+export type TaskSource = 'manual' | 'growth'
+
 /** 单条任务记录 */
 export interface Task {
   id: string
@@ -27,6 +30,8 @@ export interface Task {
   url: string
   note: NoteTextInfo
   noteType: NoteMediaType
+  /** 未标记的历史数据视为 manual */
+  source: TaskSource
   extractedAt: number
   analysis: AiAnalysisResult | null
   analyzedAt: number | null
@@ -38,7 +43,9 @@ export interface Task {
 }
 
 /** 新建任务时由调用方提供的字段 */
-export type NewTaskInput = Pick<Task, 'noteId' | 'url' | 'note' | 'noteType'>
+export type NewTaskInput = Pick<Task, 'noteId' | 'url' | 'note' | 'noteType'> & {
+  source?: TaskSource
+}
 
 /** 允许更新的字段 */
 export type TaskPatch = Partial<
@@ -63,6 +70,7 @@ function createTaskId(): string {
 function normalizeTask(task: Task): Task {
   return {
     ...task,
+    source: task.source ?? 'manual',
     imageHistory: Array.isArray(task.imageHistory) ? task.imageHistory : [],
   }
 }
@@ -85,6 +93,7 @@ async function buildTaskFromLegacyCaches(): Promise<Task[]> {
     url: extract.url,
     note: extract.note,
     noteType: extract.noteType ?? 'normal',
+    source: 'manual',
     extractedAt: Date.now(),
     analysis: analysis?.analysis ?? null,
     analyzedAt: analysis?.analyzedAt ?? null,
@@ -141,6 +150,7 @@ export async function createTask(input: NewTaskInput): Promise<Task> {
   const tasks = await readAll()
   const task: Task = {
     ...input,
+    source: input.source ?? 'manual',
     id: createTaskId(),
     extractedAt: Date.now(),
     analysis: null,
