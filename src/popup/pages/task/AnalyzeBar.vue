@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { NButton, NSelect, NText, NTooltip } from 'naive-ui'
 import type { DoubaoModel } from '../../../shared/ai-settings'
 import { DOUBAO_MODEL_OPTIONS } from '../../../shared/ai-settings'
+import { PRO_TEXT_MODEL } from '../../../shared/pro-ai-api'
 import type { ContentView } from '../../types/content-view'
 import InfoTip from '../../components/InfoTip.vue'
 
@@ -16,6 +17,7 @@ const props = defineProps<{
   isAiConfigured: boolean
   isGenerateReady: boolean
   model: DoubaoModel
+  isProPlan: boolean
 }>()
 
 const emit = defineEmits<{
@@ -30,11 +32,17 @@ const modelSelectOptions = computed(() =>
 )
 
 const selectedModelDescription = computed(
-  () => DOUBAO_MODEL_OPTIONS.find((item) => item.value === props.model)?.description ?? '',
+  () =>
+    props.isProPlan
+      ? 'Pro 图文模型，分析等待时间会稍长以保证稳定；AI 分析或生成中请不要离开页面，以免数据丢失'
+      : DOUBAO_MODEL_OPTIONS.find((item) => item.value === props.model)?.description ?? '',
 )
 
-const MODEL_TIP =
-  '豆包大模型均支持配图识图，请在笔记预览中勾选图片参与分析。分析与生成功能共用同一 ARK Key。'
+const modelTip = computed(() => props.isProPlan
+  ? `Pro 图文分析使用 ${PRO_TEXT_MODEL}，请求会等待更长时间以提升稳定性；AI 分析或生成中请不要离开页面。`
+  : '豆包大模型均支持配图识图，请在笔记预览中勾选图片参与分析。分析与生成功能共用同一 ARK Key；AI 分析或生成中请不要离开页面。')
+
+const activeModelLabel = computed(() => (props.isProPlan ? PRO_TEXT_MODEL : ''))
 
 const showPrimaryAction = computed(
   () => props.contentView === 'note' || props.contentView === 'analysis',
@@ -87,7 +95,14 @@ function handlePrimaryClick() {
 
 <template>
   <div class="analyze-bar">
-    <div class="model-row">
+    <div v-if="isProPlan" class="model-row">
+      <div class="pro-model-pill">
+        {{ activeModelLabel }}
+      </div>
+      <InfoTip :content="modelTip" placement="bottom" />
+    </div>
+
+    <div v-else class="model-row">
       <NSelect
         :value="model"
         :options="modelSelectOptions"
@@ -95,7 +110,7 @@ function handlePrimaryClick() {
         class="model-select"
         @update:value="emit('update:model', $event)"
       />
-      <InfoTip :content="MODEL_TIP" placement="bottom" />
+      <InfoTip :content="modelTip" placement="bottom" />
     </div>
 
     <div v-if="showPrimaryAction" class="analyze-row">
@@ -150,6 +165,21 @@ function handlePrimaryClick() {
 .model-select {
   flex: 1;
   min-width: 0;
+}
+
+.pro-model-pill {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  border-radius: 6px;
+  background: #fff7e8;
+  border: 1px solid #ffe7ba;
+  color: #1d2129;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .analyze-row {

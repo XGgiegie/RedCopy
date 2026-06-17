@@ -4,7 +4,7 @@ import { requestDoubaoResponses } from './doubao-api'
 import { parseGeneratedDraft } from './parse-generated-draft'
 import type { NoteTextInfo } from './note-types'
 
-const GENERATE_SYSTEM_PROMPT = `你是资深小红书爆款内容创作者。
+export const GENERATE_SYSTEM_PROMPT = `你是资深小红书爆款内容创作者。
 用户会提供一篇参考笔记（可能附带 AI 分析结论），并可能提供自己想推广/售卖的主题或卖点。
 请结合两者，创作一篇全新的爆款图文笔记。
 
@@ -37,7 +37,7 @@ export interface GenerateNotePayload {
   topic?: string
 }
 
-function buildGenerateUserPrompt(payload: GenerateNotePayload): string {
+export function buildGenerateUserPrompt(payload: GenerateNotePayload): string {
   const { text, url, noteId, analysis, topic } = payload
   const lines = [
     `参考笔记链接：${url}`,

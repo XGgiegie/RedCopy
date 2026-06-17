@@ -27,11 +27,21 @@ import {
 import { downloadImageByUrl, guessImageExtension } from '../../../shared/note-media'
 import { useTaskOperationsStore } from '../../stores/task-operations'
 import { generateDraftImage } from '../../services/generate-image'
+import type { ProImageModel } from '../../../shared/pro-ai-api'
+import type {
+  ProGeminiImageSize,
+  ProGptImageBackground,
+  ProGptImageModeration,
+  ProGptImageQuality,
+  ProGptImageSize,
+  ProImageAspectRatio,
+} from '../../../shared/pro-image'
 
 const imagePrompts = defineModel<DraftImagePrompt[]>('imagePrompts', { required: true })
 
 const props = defineProps<{
   taskId: string
+  isProPlan: boolean
   isGenerateReady: boolean
   imageHistory: GeneratedImageRecord[]
 }>()
@@ -44,10 +54,18 @@ const emit = defineEmits<{
 
 const message = useMessage()
 const taskOps = useTaskOperationsStore()
+const isGeneratingAll = ref(false)
 
 // 参考图与尺寸属于本地临时输入，不写入持久化草稿（避免 base64 撑爆存储）
 const referencesByPrompt = reactive<Record<string, string[]>>({})
 const sizeByPrompt = reactive<Record<string, string>>({})
+const proModelByPrompt = reactive<Record<string, ProImageModel>>({})
+const proGeminiRatioByPrompt = reactive<Record<string, ProImageAspectRatio>>({})
+const proGeminiSizeByPrompt = reactive<Record<string, ProGeminiImageSize>>({})
+const proGptSizeByPrompt = reactive<Record<string, ProGptImageSize>>({})
+const proGptQualityByPrompt = reactive<Record<string, ProGptImageQuality>>({})
+const proGptModerationByPrompt = reactive<Record<string, ProGptImageModeration>>({})
+const proGptBackgroundByPrompt = reactive<Record<string, ProGptImageBackground>>({})
 const dragOverId = ref<string | null>(null)
 
 const sizeOptions = IMAGE_SIZE_OPTIONS.map((item) => ({
@@ -55,12 +73,111 @@ const sizeOptions = IMAGE_SIZE_OPTIONS.map((item) => ({
   value: item.value,
 }))
 
+const proModelOptions: Array<{ label: string; value: ProImageModel }> = [
+  { label: 'Gemini 3.1 Flash Image', value: 'gemini-3.1-flash-image' },
+  { label: 'GPT Image 2', value: 'gpt-image-2' },
+]
+
+const geminiRatioOptions: Array<{ label: string; value: ProImageAspectRatio }> = [
+  { label: '1:1', value: '1:1' },
+  { label: '4:3', value: '4:3' },
+  { label: '3:4', value: '3:4' },
+  { label: '16:9', value: '16:9' },
+  { label: '9:16', value: '9:16' },
+]
+
+const geminiImageSizeOptions: Array<{ label: string; value: ProGeminiImageSize }> = [
+  { label: '1k', value: '1k' },
+  { label: '2k', value: '2k' },
+]
+
+const gptSizeOptions: Array<{ label: string; value: ProGptImageSize }> = [
+  { label: '1024×1024', value: '1024x1024' },
+  { label: '1024×1536', value: '1024x1536' },
+  { label: '1536×1024', value: '1536x1024' },
+  { label: '自动', value: 'auto' },
+]
+
+const gptQualityOptions: Array<{ label: string; value: ProGptImageQuality }> = [
+  { label: '高', value: 'high' },
+  { label: '中', value: 'medium' },
+  { label: '低', value: 'low' },
+  { label: '自动', value: 'auto' },
+]
+
+const gptModerationOptions: Array<{ label: string; value: ProGptImageModeration }> = [
+  { label: '低', value: 'low' },
+  { label: '自动', value: 'auto' },
+]
+
+const gptBackgroundOptions: Array<{ label: string; value: ProGptImageBackground }> = [
+  { label: '自动', value: 'auto' },
+  { label: '透明', value: 'transparent' },
+  { label: '不透明', value: 'opaque' },
+]
+
 function getReferences(id: string): string[] {
   return referencesByPrompt[id] ?? []
 }
 
 function getSize(id: string): string {
   return sizeByPrompt[id] ?? DEFAULT_IMAGE_SIZE
+}
+
+function getProModel(id: string): ProImageModel {
+  return proModelByPrompt[id] ?? 'gemini-3.1-flash-image'
+}
+
+function getProGeminiRatio(id: string): ProImageAspectRatio {
+  return proGeminiRatioByPrompt[id] ?? '1:1'
+}
+
+function getProGeminiSize(id: string): ProGeminiImageSize {
+  return proGeminiSizeByPrompt[id] ?? '1k'
+}
+
+function getProGptSize(id: string): ProGptImageSize {
+  return proGptSizeByPrompt[id] ?? '1024x1024'
+}
+
+function getProGptQuality(id: string): ProGptImageQuality {
+  return proGptQualityByPrompt[id] ?? 'high'
+}
+
+function getProGptModeration(id: string): ProGptImageModeration {
+  return proGptModerationByPrompt[id] ?? 'low'
+}
+
+function getProGptBackground(id: string): ProGptImageBackground {
+  return proGptBackgroundByPrompt[id] ?? 'auto'
+}
+
+function currentImageMeta(id: string): { size: string; aspectRatio?: string } {
+  if (!props.isProPlan) {
+    const size = getSize(id)
+    return { size, aspectRatio: aspectRatioOfSize(size) }
+  }
+
+  const model = getProModel(id)
+  if (model === 'gpt-image-2') {
+    const size = getProGptSize(id)
+    return {
+      size,
+      aspectRatio:
+        size === '1024x1024'
+          ? '1:1'
+          : size === '1024x1536'
+            ? '2:3'
+            : size === '1536x1024'
+              ? '3:2'
+              : undefined,
+    }
+  }
+
+  return {
+    size: getProGeminiSize(id),
+    aspectRatio: getProGeminiRatio(id),
+  }
 }
 
 function resultsOf(promptId: string): GeneratedImageRecord[] {
@@ -84,6 +201,13 @@ function removePrompt(id: string) {
   imagePrompts.value = imagePrompts.value.filter((item) => item.id !== id)
   delete referencesByPrompt[id]
   delete sizeByPrompt[id]
+  delete proModelByPrompt[id]
+  delete proGeminiRatioByPrompt[id]
+  delete proGeminiSizeByPrompt[id]
+  delete proGptSizeByPrompt[id]
+  delete proGptQualityByPrompt[id]
+  delete proGptModerationByPrompt[id]
+  delete proGptBackgroundByPrompt[id]
   notifyEdit()
 }
 
@@ -188,26 +312,41 @@ function isGenerating(item: DraftImagePrompt): boolean {
   return taskOps.isGeneratingImage(props.taskId, item.id)
 }
 
-async function handleGenerate(item: DraftImagePrompt) {
+async function generateOneImage(item: DraftImagePrompt): Promise<boolean> {
   if (!props.isGenerateReady) {
-    message.warning('请先在设置中配置 ARK API Key')
-    return
+    message.warning(props.isProPlan ? '请先在设置中配置 Pro 版 API Key' : '请先在设置中配置 ARK API Key')
+    return false
   }
   if (!item.prompt.trim()) {
     message.warning('请先填写配图提示词')
-    return
+    return false
+  }
+  if (isGenerating(item)) {
+    return false
   }
 
   const { taskId } = props
   const references = getReferences(item.id)
-  const size = getSize(item.id)
+  const meta = currentImageMeta(item.id)
+  const proModel = getProModel(item.id)
 
   taskOps.startImage(taskId, item.id)
   try {
     const url = await generateDraftImage({
       prompt: item.prompt,
       referenceImages: references,
-      size,
+      size: getSize(item.id),
+      proModel,
+      proGemini: {
+        aspectRatio: getProGeminiRatio(item.id),
+        imageSize: getProGeminiSize(item.id),
+      },
+      proGpt: {
+        size: getProGptSize(item.id),
+        quality: getProGptQuality(item.id),
+        moderation: getProGptModeration(item.id),
+        background: getProGptBackground(item.id),
+      },
     })
 
     const record: GeneratedImageRecord = {
@@ -215,20 +354,56 @@ async function handleGenerate(item: DraftImagePrompt) {
       promptId: item.id,
       label: item.label,
       prompt: item.prompt,
-      size,
-      aspectRatio: aspectRatioOfSize(size),
+      size: props.isProPlan ? `${proModel} · ${meta.size}` : meta.size,
+      aspectRatio: meta.aspectRatio,
       fromReference: references.length > 0,
       url,
       createdAt: Date.now(),
     }
     emit('generated', record)
     message.success(references.length > 0 ? '参考图生成完成' : '配图生成完成')
+    return true
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error)
     console.error('[RedCopy] 配图生成失败', { taskId, promptId: item.id, detail }, error)
     message.error(detail)
+    return false
   } finally {
     taskOps.stopImage(taskId, item.id)
+  }
+}
+
+async function handleGenerate(item: DraftImagePrompt) {
+  await generateOneImage(item)
+}
+
+async function handleGenerateAll() {
+  if (isGeneratingAll.value) return
+  if (!props.isGenerateReady) {
+    message.warning(props.isProPlan ? '请先在设置中配置 Pro 版 API Key' : '请先在设置中配置 ARK API Key')
+    return
+  }
+
+  const pending = imagePrompts.value.filter((item) => item.prompt.trim() && !isGenerating(item))
+  if (pending.length === 0) {
+    message.warning('没有可生成的配图提示词')
+    return
+  }
+
+  isGeneratingAll.value = true
+  let success = 0
+  try {
+    for (const item of pending) {
+      const ok = await generateOneImage(item)
+      if (ok) success += 1
+    }
+    if (success === pending.length) {
+      message.success(`全部配图生成完成：${success} 张`)
+    } else {
+      message.warning(`批量生成结束：成功 ${success} 张，失败 ${pending.length - success} 张`)
+    }
+  } finally {
+    isGeneratingAll.value = false
   }
 }
 
@@ -342,6 +517,9 @@ function removeRecord(record: GeneratedImageRecord) {
 }
 
 const promptCount = computed(() => imagePrompts.value.length)
+const generateAllCount = computed(
+  () => imagePrompts.value.filter((item) => item.prompt.trim()).length,
+)
 </script>
 
 <template>
@@ -349,6 +527,16 @@ const promptCount = computed(() => imagePrompts.value.length)
     <div class="image-prompt-header">
       <NText depth="3" class="content-label">配图创作 · {{ promptCount }} 条</NText>
       <NSpace :size="6">
+        <NButton
+          size="tiny"
+          type="primary"
+          secondary
+          :loading="isGeneratingAll"
+          :disabled="generateAllCount === 0"
+          @click="handleGenerateAll"
+        >
+          生成全部
+        </NButton>
         <label class="upload-config-btn">
           上传配图
           <input
@@ -365,6 +553,9 @@ const promptCount = computed(() => imagePrompts.value.length)
 
     <NText depth="3" class="image-prompt-hint">
       每条提示词可直接文生图；上传 / 拖拽 / 粘贴（Ctrl+V）参考图后转为图生图（支持多图融合），生成前可自由编辑提示词与尺寸。若点击「上传配图」无法弹出文件框，请改用拖拽或粘贴。
+    </NText>
+    <NText depth="3" class="image-prompt-hint image-prompt-hint--warn">
+      AI 分析或生图进行中请不要离开当前页面，避免结果返回前无法写入任务导致数据丢失。
     </NText>
 
     <div v-if="promptCount === 0" class="image-prompt-empty">
@@ -403,7 +594,89 @@ const promptCount = computed(() => imagePrompts.value.length)
         @update:value="(v) => updatePrompt(item.id, { prompt: v })"
       />
 
-      <div class="control-row">
+      <div v-if="isProPlan" class="control-row control-row--wrap">
+        <div class="size-field size-field--wide">
+          <NText depth="3" class="mini-label">Pro 模型</NText>
+          <NSelect
+            :value="getProModel(item.id)"
+            :options="proModelOptions"
+            size="small"
+            class="model-select"
+            @update:value="(v) => (proModelByPrompt[item.id] = v)"
+          />
+        </div>
+
+        <template v-if="getProModel(item.id) === 'gemini-3.1-flash-image'">
+          <div class="size-field">
+            <NText depth="3" class="mini-label">比例</NText>
+            <NSelect
+              :value="getProGeminiRatio(item.id)"
+              :options="geminiRatioOptions"
+              size="small"
+              class="compact-select"
+              @update:value="(v) => (proGeminiRatioByPrompt[item.id] = v)"
+            />
+          </div>
+          <div class="size-field">
+            <NText depth="3" class="mini-label">清晰度</NText>
+            <NSelect
+              :value="getProGeminiSize(item.id)"
+              :options="geminiImageSizeOptions"
+              size="small"
+              class="compact-select"
+              @update:value="(v) => (proGeminiSizeByPrompt[item.id] = v)"
+            />
+          </div>
+        </template>
+
+        <template v-else>
+          <div class="size-field">
+            <NText depth="3" class="mini-label">尺寸</NText>
+            <NSelect
+              :value="getProGptSize(item.id)"
+              :options="gptSizeOptions"
+              size="small"
+              class="size-select"
+              @update:value="(v) => (proGptSizeByPrompt[item.id] = v)"
+            />
+          </div>
+          <div class="size-field">
+            <NText depth="3" class="mini-label">质量</NText>
+            <NSelect
+              :value="getProGptQuality(item.id)"
+              :options="gptQualityOptions"
+              size="small"
+              class="compact-select"
+              @update:value="(v) => (proGptQualityByPrompt[item.id] = v)"
+            />
+          </div>
+          <div class="size-field">
+            <NText depth="3" class="mini-label">审核</NText>
+            <NSelect
+              :value="getProGptModeration(item.id)"
+              :options="gptModerationOptions"
+              size="small"
+              class="compact-select"
+              @update:value="(v) => (proGptModerationByPrompt[item.id] = v)"
+            />
+          </div>
+          <div class="size-field">
+            <NText depth="3" class="mini-label">背景</NText>
+            <NSelect
+              :value="getProGptBackground(item.id)"
+              :options="gptBackgroundOptions"
+              size="small"
+              class="compact-select"
+              @update:value="(v) => (proGptBackgroundByPrompt[item.id] = v)"
+            />
+          </div>
+          <NText depth="3" class="gpt-image-warning">
+            gpt-image-2 费用较高且出图较慢，生成期间请不要离开页面，避免结果无法写入任务。
+          </NText>
+        </template>
+      </div>
+
+      <div v-else class="control-row">
         <div class="size-field">
           <NText depth="3" class="mini-label">尺寸</NText>
           <NSelect
@@ -415,6 +688,10 @@ const promptCount = computed(() => imagePrompts.value.length)
           />
         </div>
       </div>
+
+      <NText v-if="isProPlan" depth="3" class="image-prompt-hint image-prompt-hint--compact">
+        Pro 生图请求可能需要更久；参考图会保留在本地临时输入中，当前接口优先按文生图参数生成。
+      </NText>
 
       <label
         class="dropzone"
@@ -444,7 +721,7 @@ const promptCount = computed(() => imagePrompts.value.length)
         >
           <NImage
             :src="refImage"
-            object-fit="cover"
+            object-fit="contain"
             class="reference-thumb-image"
             :img-props="{ alt: '参考图' }"
           />
@@ -470,7 +747,7 @@ const promptCount = computed(() => imagePrompts.value.length)
           {{ getReferences(item.id).length > 0 ? '参考图生成' : '生成配图' }}
         </NButton>
         <NText v-if="!isGenerateReady" depth="3" class="key-hint">
-          需配置 ARK API Key
+          {{ isProPlan ? '需配置 Pro 版 API Key' : '需配置 ARK API Key' }}
         </NText>
       </div>
 
@@ -482,7 +759,7 @@ const promptCount = computed(() => imagePrompts.value.length)
         >
           <NImage
             :src="record.url"
-            object-fit="cover"
+            object-fit="contain"
             class="result-image"
             :img-props="{ alt: '生成结果' }"
           />
@@ -490,7 +767,7 @@ const promptCount = computed(() => imagePrompts.value.length)
             <NText depth="3" class="result-size">
               {{ record.aspectRatio ?? '' }} · {{ record.size }}
             </NText>
-            <NSpace :size="4">
+            <NSpace :size="4" class="result-actions">
               <NButton size="tiny" quaternary @click="copyImageMarkdown(record)">
                 MD
               </NButton>
@@ -522,11 +799,17 @@ const promptCount = computed(() => imagePrompts.value.length)
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   margin-bottom: 6px;
 }
 
 .image-prompt-header .content-label {
   margin-bottom: 0;
+  flex-shrink: 0;
+}
+
+.image-prompt-header :deep(.n-space) {
+  justify-content: flex-end;
 }
 
 /* 上传配图按钮用原生 label 包裹 input，确保侧栏内可靠唤起文件选择框 */
@@ -553,6 +836,16 @@ const promptCount = computed(() => imagePrompts.value.length)
   font-size: 12px;
   line-height: 1.5;
   margin-bottom: 10px;
+}
+
+.image-prompt-hint--compact {
+  margin: 6px 0 0;
+  font-size: 11px;
+}
+
+.image-prompt-hint--warn {
+  margin-top: -4px;
+  color: #d48806;
 }
 
 .image-prompt-empty {
@@ -590,10 +883,20 @@ const promptCount = computed(() => imagePrompts.value.length)
   margin-top: 8px;
 }
 
+.control-row--wrap {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .size-field {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
+}
+
+.size-field--wide {
+  flex: 1 1 100%;
 }
 
 .mini-label {
@@ -603,6 +906,26 @@ const promptCount = computed(() => imagePrompts.value.length)
 
 .size-select {
   width: 160px;
+}
+
+.model-select {
+  flex: 1;
+  min-width: 180px;
+}
+
+.compact-select {
+  width: 96px;
+}
+
+.gpt-image-warning {
+  flex: 1 1 100%;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: #fff7e8;
+  border: 1px solid #ffe7ba;
+  color: #d48806;
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .dropzone {
@@ -644,6 +967,7 @@ const promptCount = computed(() => imagePrompts.value.length)
   border-radius: 6px;
   overflow: hidden;
   border: 1px solid #e5e6eb;
+  background: #fff;
 }
 
 .reference-thumb-image {
@@ -654,7 +978,7 @@ const promptCount = computed(() => imagePrompts.value.length)
 .reference-thumb-image :deep(img) {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   display: block;
   cursor: zoom-in;
 }
@@ -688,7 +1012,7 @@ const promptCount = computed(() => imagePrompts.value.length)
 
 .result-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   margin-top: 10px;
   padding-top: 10px;
@@ -697,21 +1021,23 @@ const promptCount = computed(() => imagePrompts.value.length)
 
 .result-card {
   border: 1px solid #e5e6eb;
-  border-radius: 6px;
+  border-radius: 8px;
   overflow: hidden;
   background: #fff;
+  min-width: 0;
 }
 
 .result-image {
   display: block;
   width: 100%;
-  height: 120px;
+  aspect-ratio: 1 / 1;
+  background: #f7f8fa;
 }
 
 .result-image :deep(img) {
   width: 100%;
-  height: 120px;
-  object-fit: cover;
+  height: 100%;
+  object-fit: contain;
   display: block;
   cursor: zoom-in;
 }
@@ -722,6 +1048,7 @@ const promptCount = computed(() => imagePrompts.value.length)
   justify-content: space-between;
   padding: 4px 6px;
   gap: 4px;
+  min-width: 0;
 }
 
 .result-size {
@@ -729,6 +1056,11 @@ const promptCount = computed(() => imagePrompts.value.length)
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.result-actions {
+  flex-shrink: 0;
+  flex-wrap: nowrap;
 }
 
 /* 文件输入用「视觉隐藏」而非 display:none——

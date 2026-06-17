@@ -1,15 +1,40 @@
-import { execSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { execFileSync } from 'node:child_process'
+import { readFileSync, rmSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { platform } from 'node:process'
+import { fileURLToPath } from 'node:url'
 
-const root = new URL('..', import.meta.url).pathname
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const root = join(__dirname, '..')
 const distDir = join(root, 'dist')
 const manifest = JSON.parse(readFileSync(join(distDir, 'manifest.json'), 'utf8'))
 const version = manifest.version ?? '1.0.0'
-const zipName = `薯薯小抄-v${version}.zip`
+const zipName = `redcopy-v${version}.zip`
 const zipPath = join(root, zipName)
 
-execSync(`cd "${distDir}" && zip -r "${zipPath}" .`, { stdio: 'inherit' })
+rmSync(zipPath, { force: true })
 
-console.info(`\n✅ 打包完成: ${zipPath}`)
-console.info('上传到 Chrome 网上应用店时，选择此 zip 文件即可。')
+if (platform === 'win32') {
+  execFileSync(
+    'powershell',
+    [
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-Command',
+      "$ErrorActionPreference = 'Stop'; Compress-Archive -Path (Join-Path $env:DIST_DIR '*') -DestinationPath $env:ZIP_PATH -Force",
+    ],
+    {
+      stdio: 'inherit',
+      env: {
+        ...process.env,
+        DIST_DIR: distDir,
+        ZIP_PATH: zipPath,
+      },
+    },
+  )
+} else {
+  execFileSync('zip', ['-r', zipPath, '.'], { cwd: distDir, stdio: 'inherit' })
+}
+
+console.info(`\n[RedCopy] Package created: ${zipPath}`)

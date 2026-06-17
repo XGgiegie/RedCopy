@@ -1,8 +1,10 @@
 import type { AiAnalysisResult, GeneratedNoteDraft } from '../../shared/ai-types'
+import { isProPlan, loadAiSettings } from '../../shared/ai-settings'
 import { requestDoubaoGenerate } from '../../shared/doubao-generate'
+import { requestProGenerate } from '../../shared/pro-generate'
 import type { NoteTextInfo } from '../../shared/note-types'
 
-/** 侧栏调用火山方舟豆包生成类似笔记草稿 */
+/** 侧栏生成类似笔记草稿：免费版走豆包，Pro 版走 gemini-3.5-flash */
 export async function generateNoteDraft(payload: {
   noteId: string | null
   url: string
@@ -10,5 +12,9 @@ export async function generateNoteDraft(payload: {
   analysis?: AiAnalysisResult | null
   topic?: string
 }): Promise<GeneratedNoteDraft> {
-  return requestDoubaoGenerate(payload)
+  const settings = await loadAiSettings()
+  if (isProPlan(settings)) {
+    return requestProGenerate(payload, settings)
+  }
+  return requestDoubaoGenerate(payload, settings)
 }

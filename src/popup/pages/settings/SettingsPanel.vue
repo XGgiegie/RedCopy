@@ -21,7 +21,8 @@ import {
   loadAiSettings,
   saveAiSettings,
 } from '../../../shared/ai-settings'
-import { DOUBAO_API_KEY_URL } from '../../../shared/brand'
+import { CONTACT_WECHAT, DOUBAO_API_KEY_URL } from '../../../shared/brand'
+import { copyTextToClipboard } from '../../../shared/export-markdown'
 import { GROWTH_AI_ACTION_LIMIT } from '../../../shared/growth-acquire'
 import { PRO_CAPABILITY_SUMMARY, validateProApiKey } from '../../../shared/pro-ai-api'
 
@@ -134,6 +135,16 @@ async function handleClear() {
   }
 }
 
+async function handleCopyProContact() {
+  try {
+    await copyTextToClipboard(CONTACT_WECHAT)
+    message.success('微信号已复制，请添加后购买 Pro API Key')
+  } catch (error) {
+    console.error('[RedCopy] 复制 Pro 购买微信失败', error)
+    message.error('复制失败，请手动复制微信号')
+  }
+}
+
 onMounted(() => {
   void restoreSettings()
 })
@@ -231,6 +242,9 @@ onMounted(() => {
           文本模型：{{ PRO_CAPABILITY_SUMMARY.textModel }}
         </NText>
         <NText depth="3" class="model-list">
+          AI 评论/回复模型：{{ PRO_CAPABILITY_SUMMARY.growthCommentModel }}
+        </NText>
+        <NText depth="3" class="model-list">
           图片模型：{{ PRO_CAPABILITY_SUMMARY.imageModels.join('、') }}
         </NText>
         <NText depth="3" class="provider-note">
@@ -238,6 +252,25 @@ onMounted(() => {
         </NText>
         <NText depth="3" class="provider-note">
           {{ PRO_CAPABILITY_SUMMARY.note }}
+        </NText>
+      </div>
+
+      <div class="pro-apply-card" aria-label="Pro API Key 申请">
+        <div class="pro-apply-copy">
+          <NText strong class="pro-apply-title">申请 Pro 账户 API Key</NText>
+          <NText depth="3" class="pro-apply-desc">
+            高级模型 API Key 需人工开通。请先添加微信，购买后获取密钥，再填写到下方保存。
+          </NText>
+        </div>
+        <div class="pro-contact-row">
+          <span class="pro-contact-label">微信</span>
+          <span class="pro-contact-value">{{ CONTACT_WECHAT }}</span>
+          <NButton type="primary" secondary size="small" @click="handleCopyProContact">
+            复制
+          </NButton>
+        </div>
+        <NText depth="3" class="pro-apply-tip">
+          添加时可备注“Pro API Key”，方便快速确认开通。
         </NText>
       </div>
     </section>
@@ -404,6 +437,60 @@ onMounted(() => {
   line-height: 1.5;
   margin-top: 4px;
   color: #86909c;
+}
+
+.pro-apply-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid #ffd4d4;
+}
+
+.pro-apply-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pro-apply-title {
+  display: block;
+  font-size: 13px;
+  color: #1d2129;
+}
+
+.pro-apply-desc,
+.pro-apply-tip {
+  display: block;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.pro-contact-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px;
+  border-radius: 6px;
+  background: #fff7f7;
+}
+
+.pro-contact-label {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: #86909c;
+}
+
+.pro-contact-value {
+  min-width: 0;
+  flex: 1;
+  font-size: 14px;
+  font-weight: 700;
+  color: #ff2442;
+  overflow-wrap: anywhere;
 }
 
 .settings-actions {

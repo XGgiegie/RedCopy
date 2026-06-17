@@ -7,6 +7,7 @@ import {
   type DoubaoModel,
   isAiConfigured,
   isGenerateConfigured,
+  isProPlan,
   loadAiSettings,
   saveAnalysisModel,
 } from '../../../shared/ai-settings'
@@ -67,12 +68,14 @@ const isOpeningPublish = ref(false)
 // ── AI 设置（任务页内联，仅本页消费） ────────────────────────
 
 const analysisModel = ref<DoubaoModel>('doubao-seed-2-0-lite-260428')
+const isProPlanRef = ref(false)
 const isAiConfiguredRef = ref(false)
 const isGenerateReady = ref(false)
 
 async function refreshAiSettings() {
   const settings = await loadAiSettings()
   analysisModel.value = settings.model
+  isProPlanRef.value = isProPlan(settings)
   isAiConfiguredRef.value = isAiConfigured(settings)
   isGenerateReady.value = isGenerateConfigured(settings)
 }
@@ -583,6 +586,7 @@ onUnmounted(() => {
         :is-ai-configured="isAiConfiguredRef"
         :is-generate-ready="isGenerateReady"
         :model="analysisModel"
+        :is-pro-plan="isProPlanRef"
         @analyze="handleAnalyze"
         @generate="openGenerateDialog"
         @update:model="setAnalysisModel"
@@ -626,6 +630,7 @@ onUnmounted(() => {
         v-if="showDraftSection && draftModel"
         v-model:draft="draftModel"
         :task-id="taskId"
+        :is-pro-plan="isProPlanRef"
         :is-generate-ready="isGenerateReady"
         :image-history="imageHistory"
         :is-opening-publish="isOpeningPublish"

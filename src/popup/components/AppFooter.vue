@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import { NTooltip, useMessage } from 'naive-ui'
 import {
-  CONTACT_GROUP,
-  CONTACT_QQ,
   CONTACT_WECHAT,
 } from '../../shared/brand'
 import { copyTextToClipboard } from '../../shared/export-markdown'

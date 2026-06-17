@@ -1,5 +1,6 @@
 import type { AiSettings, DoubaoModel } from './ai-settings'
 import { DOUBAO_BASE_URL, loadAiSettings } from './ai-settings'
+import { isValidImageDataUrl } from './draft-image'
 
 export interface DoubaoInputImage {
   type: 'input_image'
@@ -56,6 +57,9 @@ export function buildDoubaoMessages(
   const userContent: DoubaoContentPart[] = []
 
   for (const imageUrl of imageUrls ?? []) {
+    if (!isValidImageDataUrl(imageUrl)) {
+      throw new Error('图文分析图片必须先转换为 Base64 data URL')
+    }
     userContent.push({ type: 'input_image', image_url: imageUrl })
   }
   userContent.push({ type: 'input_text', text: userPrompt })

@@ -1,23 +1,28 @@
 <script setup lang="ts">
+import { h } from 'vue'
 import '../../styles/content-card.css'
-import { NButton, NDynamicTags, NInput, NSpace, NText } from 'naive-ui'
+import { NButton, NDynamicTags, NInput, NSpace, NTag, NText, useMessage } from 'naive-ui'
+import type { DynamicTagsOption } from 'naive-ui'
 import type {
   GeneratedImageRecord,
   GeneratedNoteDraft,
 } from '../../../shared/ai-types'
+import { copyTextToClipboard } from '../../../shared/export-markdown'
 import DraftImagePromptList from './DraftImagePromptList.vue'
 import DraftImageHistory from './DraftImageHistory.vue'
 
 const draft = defineModel<GeneratedNoteDraft>('draft', { required: true })
+const message = useMessage()
 
 defineProps<{
   taskId: string
+  isProPlan: boolean
   isGenerateReady: boolean
   imageHistory: GeneratedImageRecord[]
   isOpeningPublish: boolean
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   copyText: []
   copyMarkdown: []
   edit: []
@@ -25,6 +30,56 @@ defineEmits<{
   deleteImage: [recordId: string]
   openPublishPage: []
 }>()
+
+function normalizeTagForCopy(tag: string): string {
+  const trimmed = tag.trim()
+  if (!trimmed) return ''
+  return trimmed.startsWith('#') ? trimmed : `#${trimmed}`
+}
+
+async function copyTag(tag: string) {
+  const value = normalizeTagForCopy(tag)
+  if (!value) return
+
+  try {
+    await copyTextToClipboard(value)
+    message.success(`已复制 ${value}`)
+  } catch (error) {
+    console.error('[RedCopy] 复制标签失败', { tag, error })
+    message.error('复制失败')
+  }
+}
+
+function removeTag(index: number) {
+  draft.value.tags = draft.value.tags.filter((_, itemIndex) => itemIndex !== index)
+  emit('edit')
+}
+
+function getTagText(tag: string | DynamicTagsOption): string {
+  return typeof tag === 'string' ? tag : tag.label
+}
+
+function renderCopyableTag(tag: string | DynamicTagsOption, index: number) {
+  const label = getTagText(tag)
+  const copyValue = normalizeTagForCopy(label)
+
+  return h(
+    NTag,
+    {
+      key: index,
+      round: true,
+      closable: true,
+      class: 'copyable-dynamic-tag',
+      title: copyValue,
+      onClick: () => copyTag(label),
+      onClose: (event: MouseEvent) => {
+        event.stopPropagation()
+        removeTag(index)
+      },
+    },
+    { default: () => label },
+  )
+}
 </script>
 
 <template>
@@ -75,6 +130,8 @@ defineEmits<{
       <NText depth="3" class="content-label">标签</NText>
       <NDynamicTags
         v-model:value="draft.tags"
+        class="copyable-tags"
+        :render-tag="renderCopyableTag"
         @update:value="$emit('edit')"
       />
     </div>
@@ -83,6 +140,7 @@ defineEmits<{
       <DraftImagePromptList
         v-model:image-prompts="draft.imagePrompts"
         :task-id="taskId"
+        :is-pro-plan="isProPlan"
         :is-generate-ready="isGenerateReady"
         :image-history="imageHistory"
         @edit="$emit('edit')"
@@ -108,5 +166,33 @@ defineEmits<{
   font-size: 12px;
   line-height: 1.5;
   margin-bottom: 12px;
+}
+
+.copyable-tags {
+  max-width: 100%;
+  row-gap: 6px;
+}
+
+.copyable-tags :deep(.n-space-item) {
+  max-width: 100%;
+}
+
+.copyable-tags :deep(.copyable-dynamic-tag) {
+  cursor: pointer;
+  border-color: #ffd4d4;
+  background: #fff7f7;
+  color: #ff2442;
+}
+
+.copyable-tags :deep(.copyable-dynamic-tag:hover) {
+  background: #fff1f0;
+  border-color: #ff9ea8;
+}
+
+.copyable-tags :deep(.copyable-dynamic-tag .n-tag__content) {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

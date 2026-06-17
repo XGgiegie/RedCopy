@@ -37,6 +37,12 @@ function formatRemaining(sec: number): string {
   return m > 0 ? `${m}分${s}秒` : `${s}秒`
 }
 
+const aiRemainingText = computed(() => {
+  if (props.progress?.aiUnlimited) return '不限'
+  const used = props.progress?.aiUsed ?? 0
+  return String(Math.max(0, GROWTH_AI_ACTION_LIMIT - used))
+})
+
 function close() {
   if (props.isRunning) return
   emit('update:show', false)
@@ -86,7 +92,7 @@ function close() {
         </div>
         <div class="stat-item">
           <span class="stat-label">AI 剩余</span>
-          <span class="stat-value">{{ Math.max(0, GROWTH_AI_ACTION_LIMIT - progress.aiUsed) }}</span>
+          <span class="stat-value">{{ aiRemainingText }}</span>
         </div>
       </div>
 

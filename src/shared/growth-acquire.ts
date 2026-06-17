@@ -56,6 +56,8 @@ export interface GrowthAcquireProgress {
   commented: number
   /** 今日已调用豆包生成评论/回复的次数（合计） */
   aiUsed: number
+  /** Pro 版获客 AI 是否不限次数 */
+  aiUnlimited?: boolean
   /** 剩余秒数 */
   remainingSec: number
 }

@@ -7,7 +7,7 @@ import {
   injectScrollSearchFeedStep,
   injectScrollSearchToTop,
 } from '../../shared/auto-collect'
-import { parseEngagementCount } from '../../shared/engagement-count'
+import { parseEngagementCount, passesEngagementFilter } from '../../shared/engagement-count'
 import { logExtractContentJson } from '../../shared/extract-log'
 import { upsertGrowthRecord } from '../../shared/growth-records'
 import type {
@@ -35,7 +35,7 @@ import {
   type NoteCommentItem,
 } from '../../shared/growth-comment'
 import { generateGrowthCommentReply, generateGrowthNoteComment } from '../../shared/growth-reply'
-import { isAiConfigured, loadAiSettings } from '../../shared/ai-settings'
+import { hasUnlimitedGrowthAi, isAiConfigured, loadAiSettings } from '../../shared/ai-settings'
 import { extractNoteFromTab } from './extract-note'
 
 export class GrowthAcquireCancelledError extends Error {
@@ -47,6 +47,7 @@ export class GrowthAcquireCancelledError extends Error {
 
 interface ProcessCardResult {
   viewedDetail: boolean
+  skippedByFilter: boolean
   replied: number
   commented: number
 }
@@ -122,7 +123,7 @@ async function resolveReplyText(
   }
 
   if (!await hooks.tryConsumeAiSlot()) {
-    console.info('[RedCopy][获客] 已达今日豆包 AI 次数上限，跳过 AI 回复', {
+    console.info('[RedCopy][获客] 已达今日 AI 次数上限，跳过 AI 回复', {
       limit: GROWTH_AI_ACTION_LIMIT,
       used: hooks.aiUsed(),
     })
@@ -148,7 +149,7 @@ async function resolveNoteCommentText(
   }
 
   if (!await hooks.tryConsumeAiSlot()) {
-    console.info('[RedCopy][获客] 已达今日豆包 AI 次数上限，跳过 AI 评论', {
+    console.info('[RedCopy][获客] 已达今日 AI 次数上限，跳过 AI 评论', {
       limit: GROWTH_AI_ACTION_LIMIT,
       used: hooks.aiUsed(),
     })
@@ -167,7 +168,7 @@ type ProgressHookBundle = {
   isCancelled: () => boolean
   remainingSec: () => number
   progressBase: () => Omit<GrowthAcquireProgress, 'phase' | 'message' | 'remainingSec'>
-  /** 今日豆包 AI 已用次数（评论 + 回复合计） */
+  /** 今日 AI 已用次数（评论 + 回复合计） */
   aiUsed: () => number
   tryConsumeAiSlot: () => Promise<boolean>
 }
@@ -348,7 +349,7 @@ async function processOneCard(
       reason: clickResult.reason,
     })
     await executeInTab(tabId, injectCloseNoteModal, [{ timeoutMs: 1500 }])
-    return { viewedDetail: false, replied: 0, commented: 0 }
+    return { viewedDetail: false, skippedByFilter: false, replied: 0, commented: 0 }
   }
 
   await waitWithCountdown(
@@ -360,6 +361,38 @@ async function processOneCard(
 
   const extract = await extractNoteFromTab(tabId, { includeDom: false })
   logExtractContentJson(extract, '[RedCopy][获客]')
+
+  const hasEngagementFilter =
+    config.minLikedCount > 0
+    || config.minCollectedCount > 0
+    || config.minCommentCount > 0
+
+  if (hasEngagementFilter) {
+    if (!extract.ok) {
+      console.info('[RedCopy][获客] 无法提取互动数据，跳过筛选目标', {
+        noteId: card.noteId,
+        title: card.title,
+      })
+      await executeInTab(tabId, injectCloseNoteModal, [{ timeoutMs: 3000 }])
+      await randomSleep({ min: 200, max: 600 })
+      return { viewedDetail: true, skippedByFilter: true, replied: 0, commented: 0 }
+    }
+
+    if (!passesEngagementFilter(extract.text, config)) {
+      console.info('[RedCopy][获客] 未达筛选条件，跳过互动', {
+        noteId: extract.noteId || card.noteId,
+        liked: extract.text.likedCount,
+        collected: extract.text.collectedCount,
+        comment: extract.text.commentCount,
+        minLikedCount: config.minLikedCount,
+        minCollectedCount: config.minCollectedCount,
+        minCommentCount: config.minCommentCount,
+      })
+      await executeInTab(tabId, injectCloseNoteModal, [{ timeoutMs: 3000 }])
+      await randomSleep({ min: 200, max: 600 })
+      return { viewedDetail: true, skippedByFilter: true, replied: 0, commented: 0 }
+    }
+  }
 
   const noteContext = {
     title: extract.ok ? extract.text.title : card.title,
@@ -405,7 +438,7 @@ async function processOneCard(
   await executeInTab(tabId, injectCloseNoteModal, [{ timeoutMs: 3000 }])
   await randomSleep({ min: 200, max: 600 })
 
-  return { viewedDetail: true, replied, commented }
+  return { viewedDetail: true, skippedByFilter: false, replied, commented }
 }
 
 export async function runGrowthAcquire(
@@ -462,11 +495,14 @@ export async function runGrowthAcquire(
   const needsAi =
     (config.enableComment && config.commentMode === 'ai')
     || (config.enableReply && config.replyMode === 'ai')
+  const settings = await loadAiSettings()
+  const aiUnlimited = hasUnlimitedGrowthAi(settings)
+
   if (needsAi) {
-    const usedBeforeRun = await getGrowthAiUsedCount()
-    if (isGrowthAiQuotaExhausted(usedBeforeRun)) {
+    const usedBeforeRun = aiUnlimited ? 0 : await getGrowthAiUsedCount()
+    if (!aiUnlimited && isGrowthAiQuotaExhausted(usedBeforeRun)) {
       throw new Error(
-        `豆包 AI 评论/回复今日额度已用完（每日共 ${GROWTH_AI_ACTION_LIMIT} 次），请明日再试或改用固定文案`,
+        `AI 评论/回复今日额度已用完（每日共 ${GROWTH_AI_ACTION_LIMIT} 次），请明日再试或改用固定文案`,
       )
     }
   }
@@ -490,7 +526,7 @@ export async function runGrowthAcquire(
   let skipped = 0
   let replied = 0
   let commented = 0
-  let aiUsed = await getGrowthAiUsedCount()
+  let aiUsed = aiUnlimited ? 0 : await getGrowthAiUsedCount()
   let aiLimitNotified = false
 
   const processedNoteIds = new Set<string>()
@@ -504,15 +540,20 @@ export async function runGrowthAcquire(
     replied,
     commented,
     aiUsed,
+    aiUnlimited,
   })
 
   const tryConsumeAiSlot = async (): Promise<boolean> => {
+    if (aiUnlimited) {
+      return true
+    }
+
     if (isGrowthAiQuotaExhausted(aiUsed)) {
       if (!aiLimitNotified) {
         aiLimitNotified = true
         report({
           phase: 'scanning',
-          message: `今日豆包 AI 额度已用完（每日共 ${GROWTH_AI_ACTION_LIMIT} 次），后续将跳过 AI 生成`,
+          message: `今日 AI 额度已用完（每日共 ${GROWTH_AI_ACTION_LIMIT} 次），后续将跳过 AI 生成`,
         })
       }
       return false
@@ -525,7 +566,7 @@ export async function runGrowthAcquire(
         aiLimitNotified = true
         report({
           phase: 'scanning',
-          message: `今日豆包 AI 额度已用完（每日共 ${GROWTH_AI_ACTION_LIMIT} 次），后续将跳过 AI 生成`,
+          message: `今日 AI 额度已用完（每日共 ${GROWTH_AI_ACTION_LIMIT} 次），后续将跳过 AI 生成`,
         })
       }
       return false
@@ -547,6 +588,7 @@ export async function runGrowthAcquire(
       replied,
       commented,
       aiUsed,
+      aiUnlimited,
       remainingSec: remainingSec(),
     })
   }
@@ -643,7 +685,12 @@ export async function runGrowthAcquire(
             }
           }
 
-          const { viewedDetail, replied: cardReplied, commented: cardCommented } =
+          const {
+            viewedDetail,
+            skippedByFilter,
+            replied: cardReplied,
+            commented: cardCommented,
+          } =
             await processOneCard(
               tabId,
               card,
@@ -658,6 +705,8 @@ export async function runGrowthAcquire(
           commented += cardCommented
 
           if (!viewedDetail) {
+            skipped += 1
+          } else if (skippedByFilter) {
             skipped += 1
           }
 

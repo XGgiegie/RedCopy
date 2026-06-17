@@ -120,7 +120,7 @@ async function downloadAll() {
       <div v-for="record in records" :key="record.id" class="history-card">
         <NImage
           :src="record.url"
-          object-fit="cover"
+          object-fit="contain"
           class="history-image"
           :img-props="{ alt: '配图历史' }"
         />
@@ -178,7 +178,8 @@ async function downloadAll() {
 }
 
 .history-card {
-  display: flex;
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   padding: 8px;
@@ -188,18 +189,18 @@ async function downloadAll() {
 }
 
 .history-image {
-  width: 64px;
-  height: 64px;
+  width: 96px;
+  height: 96px;
   border-radius: 6px;
   border: 1px solid #e5e6eb;
-  flex-shrink: 0;
   overflow: hidden;
+  background: #fff;
 }
 
 .history-image :deep(img) {
-  width: 64px;
-  height: 64px;
-  object-fit: cover;
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
   display: block;
   cursor: zoom-in;
 }
@@ -226,5 +227,23 @@ async function downloadAll() {
 
 .history-actions {
   flex-shrink: 0;
+  flex-wrap: nowrap;
+}
+
+@media (max-width: 360px) {
+  .history-card {
+    grid-template-columns: 80px minmax(0, 1fr);
+  }
+
+  .history-image,
+  .history-image :deep(img) {
+    width: 80px;
+    height: 80px;
+  }
+
+  .history-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
 }
 </style>

@@ -20,6 +20,7 @@ import {
   getGrowthAiUsedCount,
   isGrowthAiQuotaExhausted,
 } from '../../../shared/growth-ai-quota'
+import { hasUnlimitedGrowthAi, loadAiSettings } from '../../../shared/ai-settings'
 import {
   GrowthAcquireCancelledError,
   runGrowthAcquire,
@@ -58,6 +59,7 @@ const cancelled = ref(false)
 const progress = ref<GrowthAcquireProgress | null>(null)
 const showProgressDialog = ref(false)
 const growthAiUsed = ref(0)
+const growthAiUnlimited = ref(false)
 
 const usesAiMode = computed(
   () =>
@@ -70,13 +72,19 @@ const growthAiRemaining = computed(() =>
 )
 
 const aiQuotaBlocked = computed(
-  () => usesAiMode.value && growthAiRemaining.value <= 0,
+  () => usesAiMode.value && !growthAiUnlimited.value && growthAiRemaining.value <= 0,
 )
 
-const aiQuotaHint = `豆包 AI 评论与回复每日合计 ${GROWTH_AI_ACTION_LIMIT} 次，今日用完后请改用固定文案或明日再试`
+const aiQuotaHint = computed(() =>
+  growthAiUnlimited.value
+    ? 'Pro 版 AI 评论与回复不限次数'
+    : `AI 评论与回复每日合计 ${GROWTH_AI_ACTION_LIMIT} 次，今日用完后请改用固定文案或明日再试`,
+)
 
 async function refreshAiQuota() {
-  growthAiUsed.value = await getGrowthAiUsedCount()
+  const settings = await loadAiSettings()
+  growthAiUnlimited.value = hasUnlimitedGrowthAi(settings)
+  growthAiUsed.value = growthAiUnlimited.value ? 0 : await getGrowthAiUsedCount()
 }
 
 function resetForm() {
@@ -96,6 +104,7 @@ function resetForm() {
   fixedReplyText.value = '谢谢姐妹的关注～有问题随时私信我呀 💕'
   progress.value = null
   cancelled.value = false
+  growthAiUnlimited.value = false
   showProgressDialog.value = false
 }
 
@@ -173,8 +182,8 @@ async function startRun() {
     || (enableReply.value && replyMode.value === 'ai')
   if (needsAi) {
     await refreshAiQuota()
-    if (isGrowthAiQuotaExhausted(growthAiUsed.value)) {
-      message.warning(`豆包 AI 今日额度已用完（每日共 ${GROWTH_AI_ACTION_LIMIT} 次），请改用固定文案或明日再试`)
+    if (!growthAiUnlimited.value && isGrowthAiQuotaExhausted(growthAiUsed.value)) {
+      message.warning(`AI 今日额度已用完（每日共 ${GROWTH_AI_ACTION_LIMIT} 次），请改用固定文案或明日再试`)
       return
     }
   }
@@ -198,7 +207,11 @@ async function startRun() {
 
   isRunning.value = true
   cancelled.value = false
-  const aiUsedBeforeRun = needsAi ? growthAiUsed.value : await getGrowthAiUsedCount()
+  const aiUsedBeforeRun = needsAi
+    ? growthAiUsed.value
+    : growthAiUnlimited.value
+      ? 0
+      : await getGrowthAiUsedCount()
   progress.value = {
     phase: 'navigating',
     message: '准备开始…',
@@ -207,6 +220,7 @@ async function startRun() {
     replied: 0,
     commented: 0,
     aiUsed: aiUsedBeforeRun,
+    aiUnlimited: growthAiUnlimited.value,
     remainingSec: config.durationMinutes * 60,
   }
 
@@ -277,15 +291,18 @@ async function startRun() {
 
       <div
         class="ai-quota-banner"
-        :class="{ 'ai-quota-banner--empty': growthAiRemaining <= 0 }"
+        :class="{ 'ai-quota-banner--empty': !growthAiUnlimited && growthAiRemaining <= 0 }"
         role="status"
       >
         <span class="ai-quota-banner-label">今日 AI</span>
-        <span class="ai-quota-banner-remain">
+        <span v-if="growthAiUnlimited" class="ai-quota-banner-remain">
+          <strong>不限</strong>
+        </span>
+        <span v-else class="ai-quota-banner-remain">
           还剩 <strong>{{ growthAiRemaining }}</strong> 次
         </span>
-        <span class="ai-quota-banner-total">/ {{ GROWTH_AI_ACTION_LIMIT }} 次</span>
-        <span v-if="growthAiRemaining <= 0" class="ai-quota-banner-warn">
+        <span v-if="!growthAiUnlimited" class="ai-quota-banner-total">/ {{ GROWTH_AI_ACTION_LIMIT }} 次</span>
+        <span v-if="!growthAiUnlimited && growthAiRemaining <= 0" class="ai-quota-banner-warn">
           今日已用完
         </span>
       </div>
