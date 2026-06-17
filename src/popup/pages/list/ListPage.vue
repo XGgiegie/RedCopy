@@ -1,26 +1,29 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { NButton, NText, NTooltip, useMessage } from 'naive-ui'
-import { isXhsNoteUrl } from '../../../shared/extract-note'
-import { type Task, createTask, deleteTask, listTasks } from '../../../shared/task-db'
+import { type Task, clearAllTasks, createTask, deleteTask, listTasks } from '../../../shared/task-db'
 import { formatAllTasksAsMarkdown } from '../../../shared/export-markdown'
 import { logExtractContentJson } from '../../../shared/extract-log'
 import { downloadTextFile } from '../../../shared/note-media'
 import { extractNoteFromTab } from '../../services/extract-note'
 import { useTaskOperationsStore } from '../../stores/task-operations'
-import PageStatusBar from './PageStatusBar.vue'
+import { usePageStatusStore } from '../../stores/page-status'
 import TaskListCard from './TaskListCard.vue'
+import AutoCollectDialog from './AutoCollectDialog.vue'
 
 const router = useRouter()
 const message = useMessage()
 const taskOps = useTaskOperationsStore()
+const pageStatus = usePageStatusStore()
 
 const tasks = ref<Task[]>([])
-const isXhsPage = ref(false)
-const isNotePage = ref(false)
 const isExtracting = ref(false)
 const isExporting = ref(false)
+const showAutoCollect = ref(false)
+
+const isNotePage = computed(() => pageStatus.isNotePage)
+const isXhsPage = computed(() => pageStatus.isXhsPage)
 
 const busyHint = computed(() => {
   const analyzing = taskOps.analyzingIds.size
@@ -31,55 +34,8 @@ const busyHint = computed(() => {
   return parts.length > 0 ? parts.join('，') : ''
 })
 
-let watchingTabId: number | undefined
-
 async function refreshTasks() {
   tasks.value = await listTasks()
-}
-
-// ── 当前标签页状态监听（控制「提取」按钮可用） ──────────────────
-
-function applyPageUrl(url: string) {
-  isXhsPage.value = /xiaohongshu\.com/.test(url)
-  isNotePage.value = isXhsNoteUrl(url)
-  console.info('[RedCopy] 页面状态更新', {
-    url: url.slice(0, 100),
-    isXhsPage: isXhsPage.value,
-    isNotePage: isNotePage.value,
-  })
-}
-
-async function syncActiveTab() {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-  watchingTabId = tab?.id
-  applyPageUrl(tab?.url ?? '')
-}
-
-const onTabActivated: Parameters<
-  typeof chrome.tabs.onActivated.addListener
->[0] = (activeInfo) => {
-  void (async () => {
-    const tab = await chrome.tabs.get(activeInfo.tabId)
-    watchingTabId = tab.id
-    applyPageUrl(tab.url ?? '')
-  })()
-}
-
-const onTabUpdated: Parameters<typeof chrome.tabs.onUpdated.addListener>[0] = (
-  tabId,
-  changeInfo,
-  tab,
-) => {
-  if (!changeInfo.url && changeInfo.status !== 'complete') return
-  if (watchingTabId !== tabId) return
-  applyPageUrl(changeInfo.url ?? tab.url ?? '')
-}
-
-const onHistoryStateUpdated: Parameters<
-  typeof chrome.webNavigation.onHistoryStateUpdated.addListener
->[0] = (details) => {
-  if (watchingTabId !== details.tabId) return
-  applyPageUrl(details.url)
 }
 
 // ── 提取 ────────────────────────────────────────────────────
@@ -169,14 +125,31 @@ async function handleDelete(id: string) {
   }
 }
 
+async function handleClearAll() {
+  if (tasks.value.length === 0) {
+    message.warning('暂无历史任务')
+    return
+  }
+  if (taskOps.busyCount > 0) {
+    message.warning('有任务进行中，请稍后再清空')
+    return
+  }
+
+  try {
+    const count = await clearAllTasks()
+    await refreshTasks()
+    message.success(`已清空 ${count} 条历史任务`)
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    console.error('[RedCopy] 清空历史任务失败', detail, error)
+    message.error(`清空失败：${detail}`)
+  }
+}
+
 onMounted(() => {
   void refreshTasks()
-  void syncActiveTab()
-  chrome.tabs.onActivated.addListener(onTabActivated)
-  chrome.tabs.onUpdated.addListener(onTabUpdated)
-  chrome.webNavigation.onHistoryStateUpdated.addListener(onHistoryStateUpdated, {
-    url: [{ hostSuffix: 'xiaohongshu.com' }],
-  })
+  // 进入首页时主动同步一次当前标签页状态（监听由 App 根组件常驻维护）
+  void pageStatus.syncActiveTab()
 })
 
 // 后台分析/生成结束后刷新列表，更新进度条
@@ -196,52 +169,70 @@ watch(
     if (name === 'list') void refreshTasks()
   },
 )
-
-onUnmounted(() => {
-  chrome.tabs.onActivated.removeListener(onTabActivated)
-  chrome.tabs.onUpdated.removeListener(onTabUpdated)
-  chrome.webNavigation.onHistoryStateUpdated.removeListener(onHistoryStateUpdated)
-})
 </script>
 
 <template>
   <div class="list-page">
-    <PageStatusBar :is-xhs-page="isXhsPage" :is-note-page="isNotePage" />
+    <div class="list-page-sticky">
+      <div v-if="busyHint" class="busy-hint" role="status" aria-live="polite">
+        <NText depth="3" class="busy-hint-text">{{ busyHint }}</NText>
+      </div>
 
-    <div v-if="busyHint" class="busy-hint" role="status" aria-live="polite">
-      <NText depth="3" class="busy-hint-text">{{ busyHint }}</NText>
+      <div class="extract-row">
+        <NTooltip trigger="hover" :disabled="isNotePage">
+          <template #trigger>
+            <NButton
+              type="primary"
+              size="medium"
+              class="extract-btn"
+              :loading="isExtracting"
+              :disabled="!isNotePage"
+              @click="handleExtract"
+            >
+              提取当前笔记
+            </NButton>
+          </template>
+          {{ isNotePage ? '提取当前笔记到任务列表' : '请先打开小红书笔记详情页' }}
+        </NTooltip>
+
+        <NTooltip trigger="hover">
+          <template #trigger>
+            <NButton
+              secondary
+              size="medium"
+              class="auto-btn"
+              :disabled="!isXhsPage"
+              @click="showAutoCollect = true"
+            >
+              <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" class="auto-btn-icon">
+                <path
+                  d="M10 2a1 1 0 0 1 1 1v1.07A5.002 5.002 0 0 1 15.93 9H17a1 1 0 1 1 0 2h-1.07A5.002 5.002 0 0 1 11 15.93V17a1 1 0 1 1-2 0v-1.07A5.002 5.002 0 0 1 4.07 11H3a1 1 0 1 1 0-2h1.07A5.002 5.002 0 0 1 9 4.07V3a1 1 0 0 1 1-1Zm0 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm0 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4Z"
+                />
+              </svg>
+              自动
+            </NButton>
+          </template>
+          {{ isXhsPage ? '按关键词搜索并自动筛选提取' : '请先打开小红书网站' }}
+        </NTooltip>
+      </div>
+
+      <AutoCollectDialog
+        v-model:show="showAutoCollect"
+        @completed="refreshTasks"
+      />
     </div>
 
-    <NTooltip trigger="hover" :disabled="isNotePage">
-      <template #trigger>
-        <NButton
-          type="primary"
-          block
-          size="medium"
-          class="extract-btn"
-          :loading="isExtracting"
-          :disabled="!isNotePage"
-          @click="handleExtract"
-        >
-          提取当前笔记
-        </NButton>
-      </template>
-      {{ isNotePage ? '提取当前笔记到任务列表' : '请先打开小红书笔记详情页' }}
-    </NTooltip>
-
-    <NButton
-      v-if="tasks.length > 0"
-      secondary
-      block
-      size="small"
-      class="export-all-btn"
-      :loading="isExporting"
-      @click="handleExportAll"
-    >
-      一键导出全部笔记（Markdown）
-    </NButton>
-
-    <TaskListCard class="task-section" :tasks="tasks" @open="openTask" @delete="handleDelete" />
+    <div class="list-page-scroll">
+      <TaskListCard
+        class="task-section"
+        :tasks="tasks"
+        :exporting="isExporting"
+        @open="openTask"
+        @delete="handleDelete"
+        @export-all="handleExportAll"
+        @clear-all="handleClearAll"
+      />
+    </div>
   </div>
 </template>
 
@@ -249,22 +240,59 @@ onUnmounted(() => {
 .list-page {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  min-height: 100%;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.list-page-sticky {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #f7f8fa;
+  border-bottom: 1px solid #eef0f4;
+}
+
+.list-page-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   padding: 10px 12px 12px;
 }
 
+.extract-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
 .extract-btn {
+  flex: 1;
   font-weight: 600;
   height: 40px;
 }
 
-.export-all-btn {
-  font-weight: 500;
+.auto-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 40px;
+  padding: 0 12px;
+  font-weight: 600;
+}
+
+.auto-btn-icon {
+  width: 16px;
+  height: 16px;
 }
 
 .busy-hint {
-  padding: 8px 10px;
+  padding: 6px 10px;
   border-radius: 8px;
   background: #fff1f0;
   border: 1px solid #ffccc7;
@@ -277,6 +305,6 @@ onUnmounted(() => {
 
 .task-section {
   flex: 1;
-  min-height: 120px;
+  min-height: 0;
 }
 </style>

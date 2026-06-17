@@ -182,6 +182,15 @@ export async function deleteTask(id: string): Promise<void> {
   console.info('[RedCopy] 已删除任务', { id })
 }
 
+/** 清空全部历史任务 */
+export async function clearAllTasks(): Promise<number> {
+  const tasks = await readAll()
+  const count = tasks.length
+  await writeAll([])
+  console.info('[RedCopy] 已清空全部任务', { count })
+  return count
+}
+
 /** 格式化任务时间，用于列表展示 */
 export function formatTaskTime(timestamp: number): string {
   const date = new Date(timestamp)

@@ -21,6 +21,9 @@ function goBack() {
 
 <style scoped>
 .settings-view {
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
   padding: 12px;
 }
 </style>

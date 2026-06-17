@@ -653,7 +653,10 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  min-height: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding: 10px 12px 12px;
 }
 

@@ -1,14 +1,14 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { NTooltip } from 'naive-ui'
 import { APP_NAME } from '../shared/brand'
 import AppFooter from './components/AppFooter.vue'
-import InfoTip from './components/InfoTip.vue'
+import { usePageStatusStore } from './stores/page-status'
 
 const route = useRoute()
 const router = useRouter()
-
-const APP_TIP = '小红书笔记提取 · AI 分析 · 生成类似笔记'
+const pageStatus = usePageStatusStore()
 
 const isHome = computed(() => route.name === 'list')
 const isSettings = computed(() => route.name === 'settings')
@@ -30,6 +30,14 @@ function goBack() {
 function openSettings() {
   void router.push('/settings')
 }
+
+onMounted(() => {
+  pageStatus.start()
+})
+
+onUnmounted(() => {
+  pageStatus.stop()
+})
 </script>
 
 <template>
@@ -51,7 +59,21 @@ function openSettings() {
         <template v-if="isHome">
           <span class="brand-mark" aria-hidden="true">🍠</span>
           <span class="brand-name">{{ APP_NAME }}</span>
-          <InfoTip :content="APP_TIP" />
+          <NTooltip trigger="hover" placement="bottom">
+            <template #trigger>
+              <span class="status-tag" :class="`status-tag--${pageStatus.level}`">
+                <span class="status-tag-dot" aria-hidden="true" />
+                {{ pageStatus.label }}
+              </span>
+            </template>
+            {{
+              pageStatus.level === 'ready'
+                ? '已检测到小红书笔记详情页，可直接提取'
+                : pageStatus.level === 'warn'
+                  ? '当前在小红书站内，请进入一篇笔记详情页'
+                  : '请切换到小红书笔记详情页'
+            }}
+          </NTooltip>
         </template>
         <span v-else class="header-title">{{ headerTitle }}</span>
       </div>
@@ -71,10 +93,12 @@ function openSettings() {
     </header>
 
     <main class="app-body">
-      <router-view />
+      <div class="app-body-inner">
+        <router-view />
+      </div>
     </main>
 
-    <AppFooter />
+    <AppFooter class="app-footer" />
   </div>
 </template>
 
@@ -83,8 +107,9 @@ function openSettings() {
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
+  flex: 1;
+  min-height: 0;
   width: 100%;
-  height: 100%;
   overflow: hidden;
   background: #f7f8fa;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -118,6 +143,57 @@ function openSettings() {
   font-weight: 700;
   color: #1d2129;
   letter-spacing: -0.02em;
+}
+
+.status-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+  cursor: default;
+  border: 1px solid transparent;
+}
+
+.status-tag-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.status-tag--ready {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  color: #15803d;
+}
+
+.status-tag--ready .status-tag-dot {
+  background: #22c55e;
+}
+
+.status-tag--warn {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #b45309;
+}
+
+.status-tag--warn .status-tag-dot {
+  background: #f59e0b;
+}
+
+.status-tag--idle {
+  background: #f2f3f5;
+  border-color: #e5e6eb;
+  color: #86909c;
+}
+
+.status-tag--idle .status-tag-dot {
+  background: #c9cdd4;
 }
 
 .header-title {
@@ -165,7 +241,20 @@ function openSettings() {
 .app-body {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-body-inner {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-footer {
+  flex-shrink: 0;
 }
 </style>

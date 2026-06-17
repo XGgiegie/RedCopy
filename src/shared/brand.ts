@@ -5,6 +5,7 @@ export const APP_DESCRIPTION =
   '一键提取小红书图文笔记，复制 Markdown，AI 帮你读懂爆款笔记'
 
 export const CONTACT_QQ = '1653444718'
+export const CONTACT_WECHAT = '1309637529'
 export const CONTACT_GROUP = '870774371'
 
 export const DOUBAO_API_KEY_URL =

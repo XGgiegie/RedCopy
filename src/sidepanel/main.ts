@@ -24,7 +24,9 @@ const app = createApp({
       {
         default: () => [
           h(NGlobalStyle),
-          h(NMessageProvider, null, { default: () => h(App) }),
+          h(NMessageProvider, null, {
+            default: () => h('div', { class: 'rc-shell-host' }, [h(App)]),
+          }),
         ],
       },
     ),
