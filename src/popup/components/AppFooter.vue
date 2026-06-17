@@ -22,7 +22,7 @@ async function copyContact(label: string, value: string) {
 
 <template>
   <footer class="app-footer">
-    <NTooltip trigger="hover" placement="top">
+    <!-- <NTooltip trigger="hover" placement="top">
       <template #trigger>
         <button
           type="button"
@@ -38,7 +38,7 @@ async function copyContact(label: string, value: string) {
         </button>
       </template>
       QQ：{{ CONTACT_QQ }}（点击复制）
-    </NTooltip>
+    </NTooltip> -->
 
     <NTooltip trigger="hover" placement="top">
       <template #trigger>
@@ -58,7 +58,7 @@ async function copyContact(label: string, value: string) {
       微信：{{ CONTACT_WECHAT }}（点击复制）
     </NTooltip>
 
-    <NTooltip trigger="hover" placement="top">
+    <!-- <NTooltip trigger="hover" placement="top">
       <template #trigger>
         <button
           type="button"
@@ -74,7 +74,7 @@ async function copyContact(label: string, value: string) {
         </button>
       </template>
       QQ 交流群：{{ CONTACT_GROUP }}（点击复制）
-    </NTooltip>
+    </NTooltip> -->
   </footer>
 </template>
 

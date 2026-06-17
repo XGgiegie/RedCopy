@@ -40,5 +40,6 @@ export default defineManifest({
     '*://*.xiaohongshu.com/*',
     '*://*.xhscdn.com/*',
     'https://ark.cn-beijing.volces.com/*',
+    'https://aihubmix.com/*',
   ],
 })

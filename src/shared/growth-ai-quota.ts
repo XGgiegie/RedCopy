@@ -1,4 +1,5 @@
 import { GROWTH_AI_ACTION_LIMIT } from './growth-acquire'
+import { hasUnlimitedGrowthAi, loadAiSettings } from './ai-settings'
 import {
   signIntegrityPayload,
   verifyIntegrityPayload,
@@ -216,8 +217,14 @@ export function isGrowthAiQuotaExhausted(used: number): boolean {
   return used >= GROWTH_AI_ACTION_LIMIT
 }
 
-/** 占用一次豆包 AI 额度；今日已达上限时返回 false */
+/** 占用一次豆包 AI 额度；Pro 版不限次数；今日已达上限时返回 false */
 export async function consumeGrowthAiSlot(): Promise<boolean> {
+  const settings = await loadAiSettings()
+  if (hasUnlimitedGrowthAi(settings)) {
+    console.info('[RedCopy][获客] Pro 版无限 AI，跳过额度消耗')
+    return true
+  }
+
   const current = await readEffectiveQuota()
   if (isGrowthAiQuotaExhausted(current.used)) {
     console.info('[RedCopy][获客] 今日豆包 AI 额度已用完', {

@@ -3,6 +3,9 @@ import { storageGet, storageSet } from './storage'
 export const AI_SETTINGS_STORAGE_KEY = 'redcopy:aiSettings'
 export const DOUBAO_BASE_URL = 'https://ark.cn-beijing.volces.com/api/v3'
 
+/** AI 配置方案：免费版（豆包）与 Pro 版二选一 */
+export type AiPlan = 'free' | 'pro'
+
 /** 火山方舟豆包大模型（均支持图文理解） */
 export const DOUBAO_MODEL_OPTIONS = [
   {
@@ -26,16 +29,20 @@ export type DoubaoModel = (typeof DOUBAO_MODEL_OPTIONS)[number]['value']
 
 /** 设置页展示的能力说明 */
 export const DOUBAO_CAPABILITY_SUMMARY = {
-  title: '豆包（火山方舟）',
+  title: '免费版 · 豆包（火山方舟）',
   supports: ['文本分析', '配图识别', '生成类似笔记', 'AI 配图生成'],
   modelHint: '可选模型：Lite（默认）/ Mini / Pro',
   note: '分析与生成功能均使用同一 ARK API Key，在任务详情页切换模型。',
 } as const
 
 export interface AiSettings {
-  /** 火山方舟 ARK API Key */
+  /** 当前选用的方案 */
+  plan: AiPlan
+  /** 免费版：火山方舟 ARK API Key */
   apiKey: string
   model: DoubaoModel
+  /** Pro 版 API Key */
+  proApiKey: string
 }
 
 /** 旧版存储格式（兼容迁移） */
@@ -46,14 +53,22 @@ interface LegacyNestedSettings {
   provider?: string
   apiKey?: string
   model?: string
+  plan?: AiPlan
+  proApiKey?: string
 }
 
 export const DEFAULT_AI_SETTINGS: AiSettings = {
+  plan: 'free',
   apiKey: '',
   model: 'doubao-seed-2-0-lite-260428',
+  proApiKey: '',
 }
 
-function isFlatSettings(value: unknown): value is AiSettings {
+function isAiPlan(value: unknown): value is AiPlan {
+  return value === 'free' || value === 'pro'
+}
+
+function isFlatSettings(value: unknown): value is Partial<AiSettings> {
   if (!value || typeof value !== 'object') return false
   const record = value as Record<string, unknown>
   return typeof record.apiKey === 'string' && typeof record.model === 'string'
@@ -75,16 +90,33 @@ function migrateLegacySettings(saved: LegacyNestedSettings): AiSettings {
     ? legacyModel
     : DEFAULT_AI_SETTINGS.model
 
-  return { apiKey, model }
+  const proApiKey = typeof saved.proApiKey === 'string' ? saved.proApiKey.trim() : ''
+  const plan = isAiPlan(saved.plan)
+    ? saved.plan
+    : proApiKey
+      ? 'pro'
+      : 'free'
+
+  return { plan, apiKey, model, proApiKey }
 }
 
 function normalizeAiSettings(partial: Partial<AiSettings>): AiSettings {
+  const plan = isAiPlan(partial.plan) ? partial.plan : DEFAULT_AI_SETTINGS.plan
   return {
+    plan,
     apiKey: partial.apiKey?.trim() ?? '',
     model: isDoubaoModel(partial.model)
       ? partial.model
       : DEFAULT_AI_SETTINGS.model,
+    proApiKey: partial.proApiKey?.trim() ?? '',
   }
+}
+
+function enforcePlanExclusivity(settings: AiSettings): AiSettings {
+  if (settings.plan === 'pro') {
+    return { ...settings, apiKey: '' }
+  }
+  return { ...settings, proApiKey: '' }
 }
 
 export async function loadAiSettings(): Promise<AiSettings> {
@@ -96,7 +128,7 @@ export async function loadAiSettings(): Promise<AiSettings> {
 }
 
 export async function saveAiSettings(settings: AiSettings): Promise<void> {
-  const normalized = normalizeAiSettings(settings)
+  const normalized = enforcePlanExclusivity(normalizeAiSettings(settings))
   await storageSet(AI_SETTINGS_STORAGE_KEY, normalized)
 }
 
@@ -104,9 +136,25 @@ export function isDoubaoModel(value: unknown): value is DoubaoModel {
   return DOUBAO_MODEL_OPTIONS.some((item) => item.value === value)
 }
 
-/** 是否已配置 ARK API Key */
+export function isProPlan(settings: AiSettings): boolean {
+  return settings.plan === 'pro'
+}
+
+/** 是否已配置当前方案所需的 API Key */
 export function isAiConfigured(settings: AiSettings): boolean {
+  if (settings.plan === 'pro') return settings.proApiKey.trim().length > 0
   return settings.apiKey.trim().length > 0
+}
+
+/** Pro 版是否享有无限获客 AI 评论/回复 */
+export function hasUnlimitedGrowthAi(settings: AiSettings): boolean {
+  return settings.plan === 'pro' && settings.proApiKey.trim().length > 0
+}
+
+/** 当前方案下的有效 API Key */
+export function resolveActiveApiKey(settings: AiSettings): string {
+  if (settings.plan === 'pro') return settings.proApiKey.trim()
+  return settings.apiKey.trim()
 }
 
 /** @deprecated 与 isAiConfigured 相同 */
@@ -134,12 +182,15 @@ export async function saveAnalysisModel(model: DoubaoModel): Promise<AiSettings>
   return next
 }
 
-/** 清空 API Key（保留模型选择） */
+/** 清空当前方案的 API Key（保留另一方案字段与模型选择） */
 export async function clearApiKey(): Promise<AiSettings> {
   const settings = await loadAiSettings()
-  const next: AiSettings = { ...settings, apiKey: '' }
+  const next: AiSettings =
+    settings.plan === 'pro'
+      ? { ...settings, proApiKey: '' }
+      : { ...settings, apiKey: '' }
   await saveAiSettings(next)
-  console.info('[RedCopy] 已清空 ARK API Key')
+  console.info('[RedCopy] 已清空 API Key', { plan: settings.plan })
   return next
 }
 

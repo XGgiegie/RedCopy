@@ -26,10 +26,13 @@ export const usePageStatusStore = defineStore('pageStatus', () => {
 
   /** 标题栏页面标签悬停说明 */
   const tagTooltip = computed(() => {
-    if (!isXhsPage.value) return '请切换到小红书网站'
+    if (!isXhsPage.value) return '点击打开小红书网站'
     if (isNotePage.value) return '当前在笔记详情页，可直接提取'
     return '当前在小红书站内，进入笔记详情页后可提取'
   })
+
+  /** 未在小红书时，标签可点击跳转 */
+  const tagClickable = computed(() => !isXhsPage.value)
 
   function applyPageUrl(url: string) {
     isXhsPage.value = /xiaohongshu\.com/.test(url)
@@ -102,6 +105,7 @@ export const usePageStatusStore = defineStore('pageStatus', () => {
     tagLevel,
     tagLabel,
     tagTooltip,
+    tagClickable,
     start,
     stop,
     syncActiveTab,

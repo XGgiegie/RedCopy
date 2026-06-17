@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { NTooltip } from 'naive-ui'
 import { APP_NAME } from '../shared/brand'
+import { openXhsHomePage } from '../shared/xhs-login'
 import AppFooter from './components/AppFooter.vue'
 import ModuleTabs from './components/ModuleTabs.vue'
 import { usePageStatusStore } from './stores/page-status'
@@ -35,6 +36,16 @@ function goBack() {
 
 function openSettings() {
   void router.push('/settings')
+}
+
+async function handleOpenXhsPage() {
+  if (!pageStatus.tagClickable) return
+  try {
+    await openXhsHomePage()
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    console.error('[RedCopy] 打开小红书失败', detail, error)
+  }
 }
 
 onMounted(() => {
@@ -70,7 +81,19 @@ onUnmounted(() => {
           <div class="status-tags">
             <NTooltip trigger="hover" placement="bottom">
               <template #trigger>
+                <button
+                  v-if="pageStatus.tagClickable"
+                  type="button"
+                  class="status-tag status-tag--clickable"
+                  :class="`status-tag--${pageStatus.tagLevel}`"
+                  :aria-label="pageStatus.tagTooltip"
+                  @click="handleOpenXhsPage"
+                >
+                  <span class="status-tag-dot" aria-hidden="true" />
+                  {{ pageStatus.tagLabel }}
+                </button>
                 <span
+                  v-else
                   class="status-tag"
                   :class="`status-tag--${pageStatus.tagLevel}`"
                 >
@@ -189,6 +212,23 @@ onUnmounted(() => {
   white-space: nowrap;
   cursor: default;
   border: 1px solid transparent;
+}
+
+.status-tag--clickable {
+  padding: 2px 8px;
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.status-tag--clickable:hover {
+  background: #e8f3ff;
+  border-color: #bedaff;
+  color: #165dff;
+}
+
+.status-tag--clickable.status-tag--idle:hover .status-tag-dot {
+  background: #165dff;
 }
 
 .status-tag-dot {
