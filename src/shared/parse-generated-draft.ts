@@ -108,3 +108,4 @@ export function normalizeGeneratedDraft(draft: GeneratedNoteDraft): GeneratedNot
     imagePrompts: normalizeImagePrompts(base),
   }
 }
+ 
