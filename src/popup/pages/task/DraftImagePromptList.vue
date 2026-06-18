@@ -11,14 +11,14 @@ import {
 } from 'naive-ui'
 import type { DraftImagePrompt, GeneratedImageRecord } from '../../../shared/ai-types'
 import {
+  compressImageFileForStorage,
+  createEmptyImagePrompt,
+  createImageRecordId,
   DEFAULT_IMAGE_SIZE,
   IMAGE_SIZE_OPTIONS,
   aspectRatioOfSize,
-  createEmptyImagePrompt,
-  createImageRecordId,
   isLikelyImageFile,
   isValidImageDataUrl,
-  normalizeImageDataUrl,
 } from '../../../shared/draft-image'
 import {
   copyTextToClipboard,
@@ -72,6 +72,23 @@ const sizeOptions = IMAGE_SIZE_OPTIONS.map((item) => ({
   label: item.label,
   value: item.value,
 }))
+
+// 原生 textarea 自适应高度指令：
+// 改用原生 textarea 替换 naive-ui NInput，避免其受控逻辑在外部值回流时重写 DOM 导致光标跳到末尾。
+// 高度上下限由 CSS 的 min-height/max-height 控制，这里只负责按内容撑高。
+function resizeTextarea(el: HTMLTextAreaElement) {
+  el.style.height = 'auto'
+  el.style.height = `${el.scrollHeight}px`
+}
+
+const vAutosize = {
+  mounted(el: HTMLTextAreaElement) {
+    resizeTextarea(el)
+  },
+  updated(el: HTMLTextAreaElement) {
+    resizeTextarea(el)
+  },
+}
 
 const proModelOptions: Array<{ label: string; value: ProImageModel }> = [
   { label: 'Gemini 3.1 Flash Image', value: 'gemini-3.1-flash-image' },
@@ -190,15 +207,19 @@ function notifyEdit() {
 
 function addPrompt() {
   const nextIndex = imagePrompts.value.length + 1
-  imagePrompts.value = [
-    ...imagePrompts.value,
-    createEmptyImagePrompt(`配图${nextIndex}`),
-  ]
+  // 原地 push，保持与父级共享同一响应式数组，避免穿过多层 defineModel 重新赋值时丢失更新
+  imagePrompts.value.push(createEmptyImagePrompt(`配图${nextIndex}`))
   notifyEdit()
 }
 
 function removePrompt(id: string) {
-  imagePrompts.value = imagePrompts.value.filter((item) => item.id !== id)
+  // 原地 splice 删除，确保父级 draftModel 同步更新、持久化不会还原已删除项
+  const index = imagePrompts.value.findIndex((item) => item.id === id)
+  if (index === -1) {
+    console.warn('[RedCopy] 未找到要删除的配图项', { id })
+    return
+  }
+  imagePrompts.value.splice(index, 1)
   delete referencesByPrompt[id]
   delete sizeByPrompt[id]
   delete proModelByPrompt[id]
@@ -208,29 +229,19 @@ function removePrompt(id: string) {
   delete proGptQualityByPrompt[id]
   delete proGptModerationByPrompt[id]
   delete proGptBackgroundByPrompt[id]
+  console.info('[RedCopy] 已删除配图项', { id, remaining: imagePrompts.value.length })
   notifyEdit()
 }
 
 function updatePrompt(id: string, patch: Partial<DraftImagePrompt>) {
-  imagePrompts.value = imagePrompts.value.map((item) =>
-    item.id === id ? { ...item, ...patch } : item,
-  )
+  // 原地修改当前项，保持对象引用稳定，避免每次按键重建数组导致受控输入光标跳到末尾
+  const target = imagePrompts.value.find((item) => item.id === id)
+  if (!target) return
+  Object.assign(target, patch)
   notifyEdit()
 }
 
 // ── 参考图上传（点击 + 拖拽，统一转 base64） ─────────────────
-
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => {
-      if (typeof reader.result === 'string') resolve(reader.result)
-      else reject(new Error('读取失败'))
-    }
-    reader.onerror = () => reject(reader.error ?? new Error('读取失败'))
-    reader.readAsDataURL(file)
-  })
-}
 
 async function addReferenceFiles(id: string, files: FileList | File[]) {
   const all = Array.from(files)
@@ -252,7 +263,7 @@ async function addReferenceFiles(id: string, files: FileList | File[]) {
       continue
     }
     try {
-      const dataUrl = normalizeImageDataUrl(await readFileAsDataUrl(file))
+      const dataUrl = await compressImageFileForStorage(file, { maxEdge: 1280, quality: 0.82 })
       if (!isValidImageDataUrl(dataUrl)) {
         console.warn('[RedCopy] 参考图格式校验未通过', {
           name: file.name,
@@ -424,7 +435,7 @@ async function addUploadedImageFiles(files: File[]): Promise<void> {
       continue
     }
     try {
-      const dataUrl = normalizeImageDataUrl(await readFileAsDataUrl(file))
+      const dataUrl = await compressImageFileForStorage(file, { maxEdge: 1920, quality: 0.85 })
       if (!isValidImageDataUrl(dataUrl)) {
         console.warn('[RedCopy] 上传配图格式校验未通过', {
           name: file.name,
@@ -543,7 +554,7 @@ const generateAllCount = computed(
             type="file"
             accept="image/*"
             multiple
-            class="hidden-file-input"
+            class="file-input-hidden"
             @change="onImageFilesSelected"
           />
         </label>
@@ -586,13 +597,13 @@ const generateAllCount = computed(
         </NButton>
       </div>
 
-      <NInput
+      <textarea
+        v-autosize
         :value="item.prompt"
-        type="textarea"
+        class="prompt-textarea"
         :placeholder="`配图 ${index + 1} 的完整文生图提示词`"
-        :autosize="{ minRows: 3, maxRows: 10 }"
-        @update:value="(v) => updatePrompt(item.id, { prompt: v })"
-      />
+        @input="(e) => updatePrompt(item.id, { prompt: (e.target as HTMLTextAreaElement).value })"
+      ></textarea>
 
       <div v-if="isProPlan" class="control-row control-row--wrap">
         <div class="size-field size-field--wide">
@@ -705,7 +716,7 @@ const generateAllCount = computed(
           type="file"
           accept="image/*"
           multiple
-          class="hidden-file-input"
+          class="file-input-hidden"
           @change="(e) => onReferenceFileChange(item.id, e)"
         />
         <NText depth="3" class="dropzone-text">
@@ -812,7 +823,13 @@ const generateAllCount = computed(
   justify-content: flex-end;
 }
 
-/* 上传配图按钮用原生 label 包裹 input，确保侧栏内可靠唤起文件选择框 */
+/* 文件输入用 display:none：不占布局、不会盖住侧栏；
+   由原生 <label> 关联唤起文件框（比 JS .click() 在侧栏中更可靠） */
+.file-input-hidden {
+  display: none !important;
+}
+
+/* 「上传配图」用原生 label 包裹 input，点击 label 即触发文件框 */
 .upload-config-btn {
   display: inline-flex;
   align-items: center;
@@ -821,13 +838,14 @@ const generateAllCount = computed(
   border-radius: 4px;
   font-size: 12px;
   color: #4e5969;
+  background: #f2f3f5;
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
   user-select: none;
 }
 
 .upload-config-btn:hover {
-  background: #f2f3f5;
+  background: #e5e6eb;
   color: #ff2442;
 }
 
@@ -874,6 +892,40 @@ const generateAllCount = computed(
 .label-input {
   flex: 1;
   min-width: 0;
+}
+
+/* 原生 textarea，外观对齐 naive-ui，但由原生元素保证编辑时光标不跳 */
+.prompt-textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 78px;
+  max-height: 240px;
+  padding: 6px 10px;
+  border: 1px solid #e0e0e6;
+  border-radius: 4px;
+  background: #fff;
+  color: #333;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.6;
+  resize: none;
+  overflow-y: auto;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.prompt-textarea::placeholder {
+  color: #c2c2c8;
+}
+
+.prompt-textarea:hover {
+  border-color: #ff7088;
+}
+
+.prompt-textarea:focus {
+  border-color: #ff2442;
+  box-shadow: 0 0 0 2px rgba(255, 36, 66, 0.16);
+  outline: none;
 }
 
 .control-row {
@@ -1061,20 +1113,5 @@ const generateAllCount = computed(
 .result-actions {
   flex-shrink: 0;
   flex-wrap: nowrap;
-}
-
-/* 文件输入用「视觉隐藏」而非 display:none——
-   部分 Chrome 状态下 display:none / visibility:hidden 的 input 点击不弹出文件框 */
-.hidden-file-input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  border: 0;
-  opacity: 0;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
 }
 </style>

@@ -18,6 +18,9 @@ import DraftImageHistory from './DraftImageHistory.vue'
 const draft = defineModel<GeneratedNoteDraft>('draft', { required: true })
 const message = useMessage()
 
+// 稳定引用：行内对象字面量每次重渲染都会生成新引用，触发 NInput 的 autosize 监听重算尺寸并把光标重置到末尾
+const BODY_AUTOSIZE = { minRows: 6, maxRows: 16 } as const
+
 defineProps<{
   taskId: string
   isProPlan: boolean
@@ -134,7 +137,7 @@ function handleTitleUpdate(value: string) {
         v-model:value="draft.body"
         type="textarea"
         placeholder="输入正文"
-        :autosize="{ minRows: 6, maxRows: 16 }"
+        :autosize="BODY_AUTOSIZE"
         @update:value="$emit('edit')"
       />
     </div>

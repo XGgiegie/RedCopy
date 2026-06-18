@@ -87,13 +87,16 @@ export function parseGeneratedDraft(content: string): GeneratedNoteDraft {
  * 规范化已存储草稿；若此前解析失败导致正文仍是 JSON 原文，尝试重新解析。
  */
 export function normalizeGeneratedDraft(draft: GeneratedNoteDraft): GeneratedNoteDraft {
-  const source = draft.raw?.trim() || draft.body.trim()
+  // 仅依据「当前草稿」判断是否解析失败；不能用 draft.raw（原始 JSON 永远像未解析），
+  // 否则每次加载都会用 raw 重解析，把用户对标题/正文/配图项的编辑（含删除）全部还原。
+  const body = draft.body.trim()
   const looksLikeUnparsedJson =
     draft.title === '（生成结果）' ||
-    (source.startsWith('{') && source.includes('"title"') && source.includes('"body"'))
+    (body.startsWith('{') && body.includes('"title"') && body.includes('"body"'))
 
   let base = draft
   if (looksLikeUnparsedJson) {
+    const source = draft.raw?.trim() || body
     const reparsed = parseGeneratedDraft(source)
     base = reparsed.title !== '（生成结果）' ? reparsed : draft
   }

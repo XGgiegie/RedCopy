@@ -103,3 +103,70 @@ export function normalizeImageDataUrl(value: string): string {
   if (!match) return trimmed
   return `${match[1]}${match[2].toLowerCase()}${match[3]}`
 }
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (typeof reader.result === 'string') resolve(reader.result)
+      else reject(new Error('读取失败'))
+    }
+    reader.onerror = () => reject(reader.error ?? new Error('读取失败'))
+    reader.readAsDataURL(file)
+  })
+}
+
+function loadImageElement(dataUrl: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => resolve(image)
+    image.onerror = () => reject(new Error('图片解码失败'))
+    image.src = dataUrl
+  })
+}
+
+/**
+ * 压缩本地图片后再转 data URL，避免大图 base64 撑爆侧栏渲染与 chrome.storage。
+ */
+export async function compressImageFileForStorage(
+  file: File,
+  options?: { maxEdge?: number; quality?: number },
+): Promise<string> {
+  const maxEdge = options?.maxEdge ?? 1920
+  const quality = options?.quality ?? 0.85
+  const rawDataUrl = normalizeImageDataUrl(await readFileAsDataUrl(file))
+
+  if (!isValidImageDataUrl(rawDataUrl)) {
+    throw new Error('图片格式不受支持')
+  }
+
+  const image = await loadImageElement(rawDataUrl)
+  const longestEdge = Math.max(image.naturalWidth, image.naturalHeight)
+  if (longestEdge <= maxEdge) {
+    return rawDataUrl
+  }
+
+  const scale = maxEdge / longestEdge
+  const width = Math.max(1, Math.round(image.naturalWidth * scale))
+  const height = Math.max(1, Math.round(image.naturalHeight * scale))
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const context = canvas.getContext('2d')
+  if (!context) {
+    return rawDataUrl
+  }
+
+  context.drawImage(image, 0, 0, width, height)
+  const outputType = file.type.toLowerCase().includes('png') ? 'image/png' : 'image/jpeg'
+  const compressed = canvas.toDataURL(outputType, quality)
+  console.info('[RedCopy] 上传配图已压缩', {
+    name: file.name,
+    from: `${image.naturalWidth}x${image.naturalHeight}`,
+    to: `${width}x${height}`,
+    beforeKb: Math.round(rawDataUrl.length / 1024),
+    afterKb: Math.round(compressed.length / 1024),
+  })
+  return normalizeImageDataUrl(compressed)
+}
+
