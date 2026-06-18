@@ -3,7 +3,7 @@ import { defineManifest } from '@crxjs/vite-plugin'
 export default defineManifest({
   manifest_version: 3,
   name: '薯薯小抄',
-  version: '1.3.0',
+  version: '1.3.1',
   description: '一键提取小红书图文笔记，复制 Markdown，AI 帮你读懂爆款笔记',
   icons: {
     16: 'public/icons/icon-16.png',
