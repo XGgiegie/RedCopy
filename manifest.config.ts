@@ -26,6 +26,13 @@ export default defineManifest({
     service_worker: 'src/background/index.ts',
     type: 'module',
   },
+  content_scripts: [
+    {
+      matches: ['*://*.xiaohongshu.com/*'],
+      js: ['src/content/xhs-detail-download-enhancer.ts'],
+      run_at: 'document_idle',
+    },
+  ],
   permissions: [
     'activeTab',
     'downloads',
