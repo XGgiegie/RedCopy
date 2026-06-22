@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "cross-env CHOKIDAR_USEPOLLING=true vite",
     "dev:watch": "cross-env CHOKIDAR_USEPOLLING=true vite build --watch",
-    "build": "vue-tsc -b && vite build",
+    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && vue-tsc -b && vite build",
     "icons": "node scripts/generate-icons.mjs",
     "package": "npm run icons && npm run build && node scripts/package-extension.mjs",
     "preview": "vite preview"
