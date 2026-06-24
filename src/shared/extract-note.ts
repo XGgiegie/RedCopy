@@ -7,7 +7,7 @@ import type {
 
 /** 判断是否为笔记详情页 URL */
 export function isXhsNoteUrl(url: string): boolean {
-  return /xiaohongshu\.com\/(explore|discovery\/item)\/[a-zA-Z0-9]+/.test(url)
+  return /xiaohongshu\.com\/(explore|discovery\/item|search_result)\/[a-zA-Z0-9]+/.test(url)
 }
 
 export interface InjectExtractNoteOptions {
@@ -24,14 +24,14 @@ export function injectExtractNote(
 ): NoteExtractResult {
   const includeDom = options.includeDom ?? true
   const url = location.href
-  const isNotePage = /xiaohongshu\.com\/(explore|discovery\/item)\/[a-zA-Z0-9]+/.test(
+  const isNotePage = /xiaohongshu\.com\/(explore|discovery\/item|search_result)\/[a-zA-Z0-9]+/.test(
     url,
   )
 
   /** 从 URL 解析当前笔记 ID（SPA 下用于定位当前笔记，避免取到历史缓存里的其它笔记） */
   function parseNoteIdFromUrl(href: string): string | null {
     const match = href.match(
-      /xiaohongshu\.com\/(?:explore|discovery\/item)\/([a-zA-Z0-9]+)/,
+      /xiaohongshu\.com\/(?:explore|discovery\/item|search_result)\/([a-zA-Z0-9]+)/,
     )
     return match?.[1] ?? null
   }

@@ -1,0 +1,2430 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>薯薯小抄 · 小红书宣传截图</title>
+  <style>
+    :root {
+      --red: #ff2442;
+      --red-dark: #d81834;
+      --ink: #1f1f24;
+      --muted: #6f7380;
+      --line: rgba(31, 31, 36, 0.12);
+      --paper: #fffaf7;
+      --cream: #fff1e8;
+      --mint: #dff8ef;
+      --blue: #dfeeff;
+      --yellow: #fff2a8;
+      --purple: #efe6ff;
+      --shadow: 0 30px 90px rgba(129, 43, 57, 0.22);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      background: #f2f0ec;
+      color: var(--ink);
+      font-family:
+        Inter,
+        "PingFang SC",
+        "Microsoft YaHei",
+        "Noto Sans CJK SC",
+        Arial,
+        sans-serif;
+      letter-spacing: 0;
+    }
+
+    body {
+      margin: 0;
+      padding: 40px 24px 80px;
+      min-width: 1128px;
+    }
+
+    .page-note {
+      width: min(1080px, 100%);
+      margin: 0 auto 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      color: #616571;
+      font-size: 16px;
+      line-height: 1.6;
+    }
+
+    .page-note strong {
+      color: var(--ink);
+    }
+
+    .capture-toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      width: 1080px;
+      margin: 0 auto 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 14px 16px;
+      border: 1px solid rgba(31, 31, 36, 0.10);
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.88);
+      box-shadow: 0 16px 45px rgba(70, 52, 56, 0.12);
+      backdrop-filter: blur(18px);
+    }
+
+    .capture-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .capture-btn {
+      height: 44px;
+      border: 0;
+      border-radius: 999px;
+      padding: 0 20px;
+      color: #ffffff;
+      background: #1f1f24;
+      font: inherit;
+      font-size: 15px;
+      font-weight: 900;
+      cursor: pointer;
+      transition:
+        transform 0.16s ease,
+        box-shadow 0.16s ease,
+        opacity 0.16s ease;
+    }
+
+    .capture-btn.primary {
+      background: linear-gradient(135deg, #ff2442, #ff6a3d);
+      box-shadow: 0 12px 26px rgba(255, 36, 66, 0.22);
+    }
+
+    .capture-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 14px 30px rgba(31, 31, 36, 0.14);
+    }
+
+    .capture-btn:disabled {
+      cursor: wait;
+      opacity: 0.55;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .capture-status {
+      color: #616571;
+      font-size: 15px;
+      line-height: 1.4;
+      font-weight: 700;
+    }
+
+    .shot-list {
+      display: grid;
+      gap: 38px;
+      justify-items: center;
+    }
+
+    .shot {
+      position: relative;
+      width: 1080px;
+      height: 1440px;
+      overflow: hidden;
+      border-radius: 0;
+      background: var(--paper);
+      box-shadow: var(--shadow);
+      isolation: isolate;
+    }
+
+    .shot::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: -3;
+      background:
+        radial-gradient(circle at 10% 11%, rgba(255, 36, 66, 0.20), transparent 280px),
+        radial-gradient(circle at 90% 5%, rgba(95, 202, 159, 0.22), transparent 330px),
+        linear-gradient(135deg, #fff8f0 0%, #fff4f5 52%, #eefaf6 100%);
+    }
+
+    .shot::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: -2;
+      opacity: 0.4;
+      background-image:
+        linear-gradient(rgba(31, 31, 36, 0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(31, 31, 36, 0.05) 1px, transparent 1px);
+      background-size: 54px 54px;
+      mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.9), transparent 84%);
+    }
+
+    .shot-inner {
+      position: relative;
+      height: 100%;
+      padding: 78px 72px 58px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 42px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .brand-logo {
+      width: 74px;
+      height: 74px;
+      border-radius: 22px;
+      display: grid;
+      place-items: center;
+      color: #ffffff;
+      font-size: 32px;
+      font-weight: 900;
+      background:
+        linear-gradient(145deg, #ff2442 0%, #ff6a3d 100%);
+      box-shadow: 0 18px 42px rgba(255, 36, 66, 0.28);
+    }
+
+    .brand-name {
+      margin: 0;
+      font-size: 34px;
+      font-weight: 900;
+      line-height: 1.1;
+    }
+
+    .brand-sub {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 48px;
+      padding: 0 22px;
+      border-radius: 999px;
+      color: var(--red-dark);
+      background: rgba(255, 36, 66, 0.10);
+      border: 1px solid rgba(255, 36, 66, 0.22);
+      font-size: 18px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .hero {
+      display: grid;
+      gap: 24px;
+      margin-bottom: 38px;
+    }
+
+    .kicker {
+      display: inline-flex;
+      width: fit-content;
+      align-items: center;
+      gap: 10px;
+      color: var(--red-dark);
+      font-size: 22px;
+      font-weight: 900;
+    }
+
+    .kicker::before {
+      content: "";
+      width: 42px;
+      height: 6px;
+      border-radius: 999px;
+      background: var(--red);
+    }
+
+    h1 {
+      max-width: 890px;
+      margin: 0;
+      font-size: 74px;
+      line-height: 1.04;
+      font-weight: 950;
+    }
+
+    .lead {
+      max-width: 840px;
+      margin: 0;
+      color: #414550;
+      font-size: 29px;
+      line-height: 1.45;
+      font-weight: 650;
+    }
+
+    .accent {
+      color: var(--red);
+    }
+
+    .workspace {
+      position: relative;
+      flex: 1;
+      min-height: 0;
+    }
+
+    .browser {
+      position: absolute;
+      right: 0;
+      bottom: 74px;
+      width: 680px;
+      min-height: 620px;
+      border: 2px solid rgba(31, 31, 36, 0.12);
+      border-radius: 32px;
+      background: rgba(255, 255, 255, 0.84);
+      box-shadow: 0 26px 70px rgba(45, 43, 39, 0.18);
+      backdrop-filter: blur(18px);
+      overflow: hidden;
+    }
+
+    .browser-head {
+      height: 70px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 24px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.72);
+    }
+
+    .dot {
+      width: 15px;
+      height: 15px;
+      border-radius: 50%;
+      background: #ff6b6b;
+    }
+
+    .dot:nth-child(2) {
+      background: #ffca3a;
+    }
+
+    .dot:nth-child(3) {
+      background: #4ecb7f;
+    }
+
+    .url {
+      flex: 1;
+      height: 34px;
+      border-radius: 999px;
+      background: #f4f5f7;
+      color: #9297a2;
+      display: flex;
+      align-items: center;
+      padding: 0 18px;
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    .note-mock {
+      display: grid;
+      grid-template-columns: 230px 1fr;
+      gap: 22px;
+      padding: 26px;
+    }
+
+    .note-cover {
+      height: 410px;
+      border-radius: 26px;
+      background:
+        linear-gradient(140deg, rgba(255, 36, 66, 0.88), rgba(255, 188, 78, 0.92)),
+        repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.25) 0 14px, transparent 14px 28px);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .note-cover::before,
+    .note-cover::after {
+      content: "";
+      position: absolute;
+      left: 26px;
+      right: 26px;
+      height: 20px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.76);
+    }
+
+    .note-cover::before {
+      bottom: 78px;
+      width: 135px;
+    }
+
+    .note-cover::after {
+      bottom: 44px;
+      width: 168px;
+    }
+
+    .note-content {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .mock-title {
+      height: 30px;
+      width: 88%;
+      border-radius: 999px;
+      background: #1f1f24;
+    }
+
+    .mock-line {
+      height: 18px;
+      border-radius: 999px;
+      background: #e7e8ec;
+    }
+
+    .mock-line.short {
+      width: 62%;
+    }
+
+    .mock-chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    .mock-chip {
+      padding: 8px 14px;
+      border-radius: 999px;
+      color: var(--red-dark);
+      background: #fff0f2;
+      font-size: 15px;
+      font-weight: 800;
+    }
+
+    .side-panel {
+      position: absolute;
+      left: 0;
+      bottom: 24px;
+      width: 404px;
+      border-radius: 34px;
+      padding: 22px;
+      background: #202126;
+      color: #ffffff;
+      box-shadow: 0 28px 80px rgba(16, 19, 25, 0.28);
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 18px;
+    }
+
+    .panel-title {
+      font-size: 24px;
+      font-weight: 900;
+    }
+
+    .panel-pill {
+      padding: 7px 13px;
+      border-radius: 999px;
+      color: #ffc8d1;
+      background: rgba(255, 36, 66, 0.22);
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .panel-card {
+      border-radius: 22px;
+      padding: 20px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      margin-top: 12px;
+    }
+
+    .panel-card strong {
+      display: block;
+      font-size: 21px;
+      margin-bottom: 10px;
+    }
+
+    .panel-card span {
+      display: block;
+      color: rgba(255, 255, 255, 0.72);
+      font-size: 16px;
+      line-height: 1.5;
+    }
+
+    .big-button {
+      height: 58px;
+      margin-top: 18px;
+      border-radius: 18px;
+      display: grid;
+      place-items: center;
+      color: #ffffff;
+      background: linear-gradient(135deg, #ff2442, #ff6a3d);
+      font-size: 20px;
+      font-weight: 950;
+      box-shadow: 0 16px 40px rgba(255, 36, 66, 0.28);
+    }
+
+    .bottom-strip {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+      margin-top: auto;
+    }
+
+    .metric {
+      min-height: 122px;
+      border-radius: 28px;
+      padding: 22px;
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid rgba(31, 31, 36, 0.10);
+      box-shadow: 0 14px 34px rgba(56, 49, 45, 0.08);
+    }
+
+    .metric b {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--red);
+      font-size: 30px;
+      line-height: 1.1;
+    }
+
+    .metric span {
+      color: #525762;
+      font-size: 18px;
+      line-height: 1.35;
+      font-weight: 700;
+    }
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 22px;
+      margin-top: 10px;
+    }
+
+    .feature {
+      min-height: 270px;
+      border: 2px solid rgba(31, 31, 36, 0.10);
+      border-radius: 30px;
+      padding: 28px;
+      background: rgba(255, 255, 255, 0.78);
+      box-shadow: 0 18px 48px rgba(70, 52, 56, 0.10);
+    }
+
+    .feature:nth-child(2) {
+      background: rgba(223, 248, 239, 0.86);
+    }
+
+    .feature:nth-child(3) {
+      background: rgba(223, 238, 255, 0.86);
+    }
+
+    .feature:nth-child(4) {
+      background: rgba(255, 242, 168, 0.80);
+    }
+
+    .icon-box {
+      width: 70px;
+      height: 70px;
+      border-radius: 22px;
+      display: grid;
+      place-items: center;
+      color: #ffffff;
+      background: #1f1f24;
+      font-size: 32px;
+      font-weight: 950;
+      margin-bottom: 24px;
+    }
+
+    .feature h2 {
+      margin: 0 0 14px;
+      font-size: 34px;
+      line-height: 1.15;
+      font-weight: 950;
+    }
+
+    .feature p {
+      margin: 0;
+      color: #555b66;
+      font-size: 22px;
+      line-height: 1.45;
+      font-weight: 650;
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin: 34px 0 0;
+    }
+
+    .flow-step {
+      min-height: 152px;
+      border-radius: 26px;
+      padding: 22px 18px;
+      background: #ffffff;
+      border: 1px solid rgba(31, 31, 36, 0.12);
+      box-shadow: 0 12px 30px rgba(70, 52, 56, 0.08);
+    }
+
+    .flow-step b {
+      display: block;
+      color: var(--red);
+      font-size: 23px;
+      margin-bottom: 12px;
+    }
+
+    .flow-step span {
+      display: block;
+      color: #454a55;
+      font-size: 17px;
+      line-height: 1.35;
+      font-weight: 750;
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: 0.92fr 1.08fr;
+      gap: 26px;
+      align-items: stretch;
+      flex: 1;
+      min-height: 0;
+    }
+
+    .phone {
+      align-self: end;
+      height: 780px;
+      border-radius: 46px;
+      padding: 24px;
+      background: #1f1f24;
+      box-shadow: 0 30px 78px rgba(31, 31, 36, 0.28);
+      color: #ffffff;
+    }
+
+    .phone-screen {
+      height: 100%;
+      border-radius: 34px;
+      background: #fffafa;
+      color: var(--ink);
+      padding: 24px;
+      overflow: hidden;
+    }
+
+    .phone-bar {
+      width: 126px;
+      height: 12px;
+      border-radius: 999px;
+      background: #1f1f24;
+      opacity: 0.16;
+      margin: 0 auto 24px;
+    }
+
+    .mini-toolbar {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .mini-tab {
+      flex: 1;
+      height: 42px;
+      border-radius: 14px;
+      display: grid;
+      place-items: center;
+      color: #ffffff;
+      background: var(--red);
+      font-size: 15px;
+      font-weight: 900;
+    }
+
+    .mini-tab.secondary {
+      color: #868b96;
+      background: #f1f2f5;
+    }
+
+    .extract-card {
+      border-radius: 24px;
+      padding: 20px;
+      background: #ffffff;
+      border: 1px solid rgba(31, 31, 36, 0.10);
+      box-shadow: 0 12px 28px rgba(45, 43, 39, 0.08);
+      margin-bottom: 16px;
+    }
+
+    .extract-title {
+      height: 24px;
+      width: 72%;
+      border-radius: 999px;
+      background: #1f1f24;
+      margin-bottom: 16px;
+    }
+
+    .extract-line {
+      height: 14px;
+      border-radius: 999px;
+      background: #eceef2;
+      margin-bottom: 10px;
+    }
+
+    .extract-images {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .extract-img {
+      aspect-ratio: 1;
+      border-radius: 16px;
+      background: linear-gradient(135deg, #ff8a9a, #ffd166);
+    }
+
+    .extract-img:nth-child(2) {
+      background: linear-gradient(135deg, #8bd3c7, #ffe59a);
+    }
+
+    .extract-img:nth-child(3) {
+      background: linear-gradient(135deg, #a9c9ff, #ffbbec);
+    }
+
+    .check-list {
+      display: grid;
+      gap: 17px;
+      align-content: end;
+    }
+
+    .check-item {
+      display: grid;
+      grid-template-columns: 56px 1fr;
+      gap: 18px;
+      align-items: start;
+      border-radius: 28px;
+      padding: 24px;
+      background: rgba(255, 255, 255, 0.76);
+      border: 1px solid rgba(31, 31, 36, 0.10);
+      box-shadow: 0 14px 34px rgba(70, 52, 56, 0.08);
+    }
+
+    .check {
+      width: 56px;
+      height: 56px;
+      border-radius: 18px;
+      display: grid;
+      place-items: center;
+      color: #ffffff;
+      background: var(--red);
+      font-size: 28px;
+      font-weight: 950;
+    }
+
+    .check-item h2 {
+      margin: 0 0 8px;
+      font-size: 31px;
+      line-height: 1.12;
+      font-weight: 950;
+    }
+
+    .check-item p {
+      margin: 0;
+      color: #565c67;
+      font-size: 20px;
+      line-height: 1.45;
+      font-weight: 650;
+    }
+
+    .analysis-board {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 22px;
+      align-items: stretch;
+      margin-top: 20px;
+    }
+
+    .analysis-card {
+      border-radius: 32px;
+      padding: 28px;
+      background: rgba(255, 255, 255, 0.82);
+      border: 1px solid rgba(31, 31, 36, 0.10);
+      box-shadow: 0 18px 46px rgba(70, 52, 56, 0.10);
+    }
+
+    .analysis-card.dark {
+      color: #ffffff;
+      background: #202126;
+    }
+
+    .analysis-card h2 {
+      margin: 0 0 20px;
+      font-size: 35px;
+      line-height: 1.12;
+      font-weight: 950;
+    }
+
+    .analysis-card p {
+      margin: 0 0 18px;
+      color: #575d68;
+      font-size: 21px;
+      line-height: 1.46;
+      font-weight: 650;
+    }
+
+    .analysis-card.dark p {
+      color: rgba(255, 255, 255, 0.74);
+    }
+
+    .score-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 14px;
+      align-items: center;
+      margin-top: 17px;
+    }
+
+    .score-label {
+      color: rgba(255, 255, 255, 0.74);
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    .score {
+      color: #ffffff;
+      font-size: 20px;
+      font-weight: 950;
+    }
+
+    .bar {
+      grid-column: 1 / -1;
+      height: 13px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.14);
+      overflow: hidden;
+    }
+
+    .bar span {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #ff2442, #ffcf5a);
+    }
+
+    .quote-card {
+      grid-column: 1 / -1;
+      border-radius: 32px;
+      padding: 28px 32px;
+      color: #ffffff;
+      background: linear-gradient(135deg, #ff2442, #ff7246);
+      box-shadow: 0 18px 46px rgba(255, 36, 66, 0.18);
+    }
+
+    .quote-card b {
+      display: block;
+      margin-bottom: 10px;
+      font-size: 32px;
+      line-height: 1.12;
+    }
+
+    .quote-card span {
+      display: block;
+      font-size: 21px;
+      line-height: 1.45;
+      font-weight: 650;
+      opacity: 0.9;
+    }
+
+    .draft-layout {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 1fr 360px;
+      gap: 24px;
+      margin-top: 22px;
+    }
+
+    .editor {
+      border-radius: 34px;
+      padding: 30px;
+      background: rgba(255, 255, 255, 0.84);
+      border: 1px solid rgba(31, 31, 36, 0.10);
+      box-shadow: 0 18px 46px rgba(70, 52, 56, 0.10);
+    }
+
+    .editor-top {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .edit-pill {
+      height: 44px;
+      padding: 0 18px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      color: #ffffff;
+      background: #1f1f24;
+      font-size: 17px;
+      font-weight: 900;
+    }
+
+    .edit-pill.red {
+      background: var(--red);
+    }
+
+    .draft-title {
+      padding: 20px 22px;
+      border-radius: 22px;
+      background: #fff1f0;
+      color: var(--red-dark);
+      font-size: 28px;
+      line-height: 1.25;
+      font-weight: 950;
+      margin-bottom: 22px;
+    }
+
+    .draft-copy {
+      display: grid;
+      gap: 14px;
+    }
+
+    .copy-line {
+      height: 20px;
+      border-radius: 999px;
+      background: #e9ebef;
+    }
+
+    .copy-line:nth-child(2) {
+      width: 92%;
+    }
+
+    .copy-line:nth-child(3) {
+      width: 78%;
+    }
+
+    .hashtags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 26px;
+    }
+
+    .hashtags span {
+      padding: 9px 15px;
+      border-radius: 999px;
+      color: #0f766e;
+      background: #dff8ef;
+      font-size: 16px;
+      font-weight: 900;
+    }
+
+    .image-side {
+      display: grid;
+      gap: 18px;
+    }
+
+    .image-card {
+      min-height: 236px;
+      border-radius: 30px;
+      padding: 22px;
+      background: linear-gradient(135deg, #202126, #393b46);
+      color: #ffffff;
+      box-shadow: 0 18px 46px rgba(31, 31, 36, 0.18);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .image-card:nth-child(2) {
+      background: linear-gradient(135deg, #0f766e, #79d7be);
+    }
+
+    .image-card:nth-child(3) {
+      background: linear-gradient(135deg, #ff2442, #ffc24f);
+    }
+
+    .image-card::after {
+      content: "";
+      position: absolute;
+      right: -26px;
+      bottom: -34px;
+      width: 180px;
+      height: 180px;
+      border-radius: 40px;
+      background: rgba(255, 255, 255, 0.18);
+      transform: rotate(18deg);
+    }
+
+    .image-card b {
+      position: relative;
+      z-index: 1;
+      display: block;
+      font-size: 28px;
+      margin-bottom: 12px;
+    }
+
+    .image-card span {
+      position: relative;
+      z-index: 1;
+      display: block;
+      max-width: 250px;
+      font-size: 19px;
+      line-height: 1.42;
+      font-weight: 700;
+      opacity: 0.88;
+    }
+
+    .growth-map {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 22px;
+      align-items: stretch;
+      margin-top: 22px;
+    }
+
+    .growth-card {
+      border-radius: 34px;
+      padding: 30px;
+      background: rgba(255, 255, 255, 0.82);
+      border: 1px solid rgba(31, 31, 36, 0.10);
+      box-shadow: 0 18px 46px rgba(70, 52, 56, 0.10);
+    }
+
+    .growth-card.wide {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      align-items: center;
+      background: #202126;
+      color: #ffffff;
+    }
+
+    .growth-card h2 {
+      margin: 0 0 16px;
+      font-size: 36px;
+      line-height: 1.12;
+      font-weight: 950;
+    }
+
+    .growth-card p {
+      margin: 0;
+      color: #565c67;
+      font-size: 22px;
+      line-height: 1.46;
+      font-weight: 650;
+    }
+
+    .growth-card.wide p {
+      color: rgba(255, 255, 255, 0.76);
+    }
+
+    .privacy-list {
+      display: grid;
+      gap: 14px;
+    }
+
+    .privacy-list span {
+      min-height: 52px;
+      border-radius: 17px;
+      display: flex;
+      align-items: center;
+      padding: 0 18px;
+      color: rgba(255, 255, 255, 0.90);
+      background: rgba(255, 255, 255, 0.10);
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    .footer-note {
+      margin-top: auto;
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 24px;
+      padding-top: 30px;
+      color: #595f69;
+      font-size: 19px;
+      line-height: 1.45;
+      font-weight: 700;
+    }
+
+    .qr {
+      width: 138px;
+      height: 138px;
+      flex: 0 0 auto;
+      border-radius: 24px;
+      padding: 12px;
+      background: #ffffff;
+      border: 1px solid rgba(31, 31, 36, 0.10);
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 6px;
+      box-shadow: 0 14px 34px rgba(70, 52, 56, 0.08);
+    }
+
+    .qr i {
+      border-radius: 4px;
+      background: #1f1f24;
+    }
+
+    .qr i:nth-child(3n) {
+      background: var(--red);
+    }
+
+    @media print {
+      body {
+        padding: 0;
+        min-width: 0;
+        background: #ffffff;
+      }
+
+      .page-note {
+        display: none;
+      }
+
+      .capture-toolbar {
+        display: none;
+      }
+
+      .shot-list {
+        gap: 0;
+      }
+
+      .shot {
+        width: 1080px;
+        height: 1440px;
+        box-shadow: none;
+        break-after: page;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page-note">
+    <span><strong>截图提示：</strong>每张画布为 1080 × 1440，小红书竖版展示友好。浏览器缩放到合适大小后，逐张截图即可。</span>
+    <span>薯薯小抄 v1.3.1</span>
+  </div>
+
+  <div class="capture-toolbar" role="region" aria-label="宣传图下载工具">
+    <span class="capture-status" id="captureStatus">可一键下载当前可见海报，或批量下载全部 PNG。</span>
+    <div class="capture-actions">
+      <button class="capture-btn" type="button" id="downloadCurrent">下载当前海报</button>
+      <button class="capture-btn primary" type="button" id="downloadAll">一键下载全部</button>
+    </div>
+  </div>
+
+  <main class="shot-list" aria-label="小红书宣传截图画布">
+    <section class="shot" data-title="01-产品总览" aria-label="宣传图一：产品总览">
+      <div class="shot-inner">
+        <header class="topbar">
+          <div class="brand">
+            <div class="brand-logo">抄</div>
+            <div>
+              <p class="brand-name">薯薯小抄</p>
+              <p class="brand-sub">小红书笔记提取与 AI 创作助手</p>
+            </div>
+          </div>
+          <div class="tag">浏览器侧栏插件</div>
+        </header>
+
+        <div class="hero">
+          <div class="kicker">从收藏灵感到可发布草稿</div>
+          <h1>把小红书笔记<br><span class="accent">一键变成创作素材库</span></h1>
+          <p class="lead">提取图文、分析爆款逻辑、生成类似笔记、制作配图，还能辅助自动获客。</p>
+        </div>
+
+        <div class="workspace" aria-hidden="true">
+          <div class="browser">
+            <div class="browser-head">
+              <span class="dot"></span>
+              <span class="dot"></span>
+              <span class="dot"></span>
+              <span class="url">xiaohongshu.com/explore/...</span>
+            </div>
+            <div class="note-mock">
+              <div class="note-cover"></div>
+              <div class="note-content">
+                <div class="mock-title"></div>
+                <div class="mock-line"></div>
+                <div class="mock-line"></div>
+                <div class="mock-line short"></div>
+                <div class="mock-chip-row">
+                  <span class="mock-chip">标题</span>
+                  <span class="mock-chip">正文</span>
+                  <span class="mock-chip">标签</span>
+                  <span class="mock-chip">图片</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="side-panel">
+            <div class="panel-head">
+              <span class="panel-title">笔记分析</span>
+              <span class="panel-pill">AI Ready</span>
+            </div>
+            <div class="panel-card">
+              <strong>提取当前笔记</strong>
+              <span>标题、正文、标签、互动数据与图片列表，整理进本机任务。</span>
+            </div>
+            <div class="panel-card">
+              <strong>生成类似笔记</strong>
+              <span>基于结构拆解，输入推广主题即可生成可编辑草稿。</span>
+            </div>
+            <div class="big-button">提取 → 分析 → 创作</div>
+          </div>
+        </div>
+
+        <div class="bottom-strip">
+          <div class="metric"><b>1 键</b><span>抓取公开笔记内容</span></div>
+          <div class="metric"><b>Markdown</b><span>复制与批量导出</span></div>
+          <div class="metric"><b>本机存储</b><span>Key 与任务不上传</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="shot" data-title="02-核心功能" aria-label="宣传图二：核心功能总览">
+      <div class="shot-inner">
+        <header class="topbar">
+          <div class="brand">
+            <div class="brand-logo">抄</div>
+            <div>
+              <p class="brand-name">薯薯小抄</p>
+              <p class="brand-sub">让内容拆解和复用更省力</p>
+            </div>
+          </div>
+          <div class="tag">核心能力</div>
+        </header>
+
+        <div class="hero">
+          <div class="kicker">内容工作流全打通</div>
+          <h1>不是简单复制<br><span class="accent">是把笔记变成可复用资产</span></h1>
+          <p class="lead">适合内容运营、品牌种草、素材研究、竞品分析和日常创作积累。</p>
+        </div>
+
+        <div class="feature-grid">
+          <article class="feature">
+            <div class="icon-box">提</div>
+            <h2>一键提取笔记</h2>
+            <p>标题、正文、标签、互动数据、图片链接一次整理。</p>
+          </article>
+          <article class="feature">
+            <div class="icon-box">导</div>
+            <h2>复制与导出</h2>
+            <p>支持 Markdown、纯文本、图片链接和全部笔记汇总。</p>
+          </article>
+          <article class="feature">
+            <div class="icon-box">析</div>
+            <h2>AI 深度分析</h2>
+            <p>拆结构、看钩子、读情绪、总结传播逻辑和创作建议。</p>
+          </article>
+          <article class="feature">
+            <div class="icon-box">写</div>
+            <h2>仿写与配图</h2>
+            <p>输入推广主题，生成类似笔记草稿和图片创作提示。</p>
+          </article>
+        </div>
+
+        <div class="flow">
+          <div class="flow-step"><b>01</b><span>打开小红书笔记详情页</span></div>
+          <div class="flow-step"><b>02</b><span>侧栏点击提取当前笔记</span></div>
+          <div class="flow-step"><b>03</b><span>AI 分析结构与爆款逻辑</span></div>
+          <div class="flow-step"><b>04</b><span>编辑草稿后复制发布</span></div>
+        </div>
+
+        <footer class="footer-note">
+          <span>基础提取、复制、下载、导出无需 API Key；AI 能力按需自备 Key 使用。</span>
+        </footer>
+      </div>
+    </section>
+
+    <section class="shot" data-title="03-提取导出" aria-label="宣传图三：提取与导出">
+      <div class="shot-inner">
+        <header class="topbar">
+          <div class="brand">
+            <div class="brand-logo">抄</div>
+            <div>
+              <p class="brand-name">薯薯小抄</p>
+              <p class="brand-sub">先把好内容稳稳收进来</p>
+            </div>
+          </div>
+          <div class="tag">无需 Key 可用</div>
+        </header>
+
+        <div class="hero">
+          <div class="kicker">提取 · 下载 · 导出</div>
+          <h1>看到一篇好笔记<br><span class="accent">不用手动整理半小时</span></h1>
+          <p class="lead">在笔记详情页点击一次，公开可见内容自动成为独立任务，后续分析、仿写互不影响。</p>
+        </div>
+
+        <div class="split">
+          <div class="phone" aria-hidden="true">
+            <div class="phone-screen">
+              <div class="phone-bar"></div>
+              <div class="mini-toolbar">
+                <span class="mini-tab">笔记</span>
+                <span class="mini-tab secondary">AI 分析</span>
+              </div>
+              <div class="extract-card">
+                <div class="extract-title"></div>
+                <div class="extract-line"></div>
+                <div class="extract-line"></div>
+                <div class="extract-line" style="width: 68%;"></div>
+                <div class="extract-images">
+                  <span class="extract-img"></span>
+                  <span class="extract-img"></span>
+                  <span class="extract-img"></span>
+                </div>
+              </div>
+              <div class="big-button">复制 Markdown</div>
+              <div class="extract-card" style="margin-top: 16px;">
+                <div class="extract-line" style="width: 84%;"></div>
+                <div class="extract-line" style="width: 58%;"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="check-list">
+            <article class="check-item">
+              <span class="check">✓</span>
+              <div>
+                <h2>图文信息自动归档</h2>
+                <p>标题、正文、标签、互动数据、图片列表都能统一预览。</p>
+              </div>
+            </article>
+            <article class="check-item">
+              <span class="check">↓</span>
+              <div>
+                <h2>图片支持单张/批量下载</h2>
+                <p>做素材收集、复盘参考、团队协作时更省事。</p>
+              </div>
+            </article>
+            <article class="check-item">
+              <span class="check">M</span>
+              <div>
+                <h2>Markdown 一键导出</h2>
+                <p>复制正文、复制图片链接，或把全部笔记汇总成一个 .md 文件。</p>
+              </div>
+            </article>
+          </div>
+        </div>
+
+        <footer class="footer-note">
+          <span>适合：竞品资料库、爆款案例库、内容复盘、选题素材池。</span>
+        </footer>
+      </div>
+    </section>
+
+    <section class="shot" data-title="04-AI分析" aria-label="宣传图四：AI 分析">
+      <div class="shot-inner">
+        <header class="topbar">
+          <div class="brand">
+            <div class="brand-logo">抄</div>
+            <div>
+              <p class="brand-name">薯薯小抄</p>
+              <p class="brand-sub">AI 帮你读懂爆款笔记</p>
+            </div>
+          </div>
+          <div class="tag">自备 API Key</div>
+        </header>
+
+        <div class="hero">
+          <div class="kicker">AI 拆解爆款逻辑</div>
+          <h1>不只看热闹<br><span class="accent">还看它为什么会火</span></h1>
+          <p class="lead">从标题钩子、内容结构、情绪价值、评论诱因到可复用写法，帮你把灵感拆成方法。</p>
+        </div>
+
+        <div class="analysis-board">
+          <article class="analysis-card dark">
+            <h2>爆款要素评分</h2>
+            <p>把笔记的吸引力拆成可观察维度，快速定位值得学习的地方。</p>
+            <div class="score-row">
+              <span class="score-label">标题钩子</span>
+              <span class="score">92%</span>
+              <span class="bar"><span style="width: 92%;"></span></span>
+            </div>
+            <div class="score-row">
+              <span class="score-label">结构清晰度</span>
+              <span class="score">86%</span>
+              <span class="bar"><span style="width: 86%;"></span></span>
+            </div>
+            <div class="score-row">
+              <span class="score-label">收藏价值</span>
+              <span class="score">89%</span>
+              <span class="bar"><span style="width: 89%;"></span></span>
+            </div>
+          </article>
+
+          <article class="analysis-card">
+            <h2>结构拆解</h2>
+            <p>开头如何抓人，中段如何铺信息，结尾如何引导收藏、评论或转化。</p>
+            <p>支持勾选图片参与识图，让图文笔记的分析更完整。</p>
+          </article>
+
+          <article class="quote-card">
+            <b>把“感觉不错”变成“我知道该学哪一段”。</b>
+            <span>适合做选题复盘、账号定位研究、品牌种草内容拆解和内容团队内部沉淀。</span>
+          </article>
+
+          <article class="analysis-card">
+            <h2>可复制建议</h2>
+            <p>输出创作建议后，可复制纯文本或 Markdown，直接放入你的内容工作台。</p>
+          </article>
+
+          <article class="analysis-card">
+            <h2>后台持续运行</h2>
+            <p>每条笔记是独立任务，离开页面后 AI 操作仍可继续，列表中可查看进度。</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="shot" data-title="05-仿写配图" aria-label="宣传图五：仿写配图与自动获客">
+      <div class="shot-inner">
+        <header class="topbar">
+          <div class="brand">
+            <div class="brand-logo">抄</div>
+            <div>
+              <p class="brand-name">薯薯小抄</p>
+              <p class="brand-sub">从分析走到创作和获客</p>
+            </div>
+          </div>
+          <div class="tag">增强能力</div>
+        </header>
+
+        <div class="hero">
+          <div class="kicker">生成草稿 · 制作配图 · 自动获客</div>
+          <h1>灵感不用停在收藏夹<br><span class="accent">下一篇内容直接开写</span></h1>
+          <p class="lead">基于 AI 分析结果生成类似笔记，标题、正文、标签都可编辑，并自动保存。</p>
+        </div>
+
+        <div class="draft-layout">
+          <div class="editor" aria-hidden="true">
+            <div class="editor-top">
+              <span class="edit-pill red">类似笔记</span>
+              <span class="edit-pill">自动保存</span>
+              <span class="edit-pill">可复制</span>
+            </div>
+            <div class="draft-title">3 个让新手也能快速上手的小红书选题方法</div>
+            <div class="draft-copy">
+              <span class="copy-line"></span>
+              <span class="copy-line"></span>
+              <span class="copy-line"></span>
+              <span class="copy-line" style="width: 88%;"></span>
+              <span class="copy-line" style="width: 66%;"></span>
+            </div>
+            <div class="hashtags">
+              <span>#小红书运营</span>
+              <span>#内容创作</span>
+              <span>#选题方法</span>
+              <span>#自媒体工具</span>
+            </div>
+          </div>
+
+          <div class="image-side">
+            <article class="image-card">
+              <b>推广主题仿写</b>
+              <span>输入你的产品、服务或账号方向，生成结构相似但内容可编辑的新笔记。</span>
+            </article>
+            <article class="image-card">
+              <b>AI 配图创作</b>
+              <span>支持文生图，也可上传、拖拽、粘贴参考图做图生图。</span>
+            </article>
+            <article class="image-card">
+              <b>发布前更顺手</b>
+              <span>复制内容，下载配图，跳转小红书发布页自行粘贴上传。</span>
+            </article>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="shot" data-title="06-自动获客与隐私" aria-label="宣传图六：自动获客与隐私">
+      <div class="shot-inner">
+        <header class="topbar">
+          <div class="brand">
+            <div class="brand-logo">抄</div>
+            <div>
+              <p class="brand-name">薯薯小抄</p>
+              <p class="brand-sub">更适合长期经营的小工具</p>
+            </div>
+          </div>
+          <div class="tag">增长 + 隐私</div>
+        </header>
+
+        <div class="hero">
+          <div class="kicker">涨粉自动获客模块</div>
+          <h1>内容之外<br><span class="accent">也照顾你的增长动作</span></h1>
+          <p class="lead">按关键词搜索和筛选潜在互动对象，沉淀互动记录，让增长动作更有秩序。</p>
+        </div>
+
+        <div class="growth-map">
+          <article class="growth-card">
+            <h2>关键词自动筛选</h2>
+            <p>围绕目标领域寻找相关内容和互动对象，减少重复手动操作。</p>
+          </article>
+          <article class="growth-card">
+            <h2>互动记录沉淀</h2>
+            <p>记录获客过程，便于回看、清理和管理历史动作。</p>
+          </article>
+          <article class="growth-card">
+            <h2>侧栏轻量运行</h2>
+            <p>不用离开当前浏览器工作流，笔记分析与增长模块可切换使用。</p>
+          </article>
+          <article class="growth-card">
+            <h2>基础功能免费</h2>
+            <p>提取、复制、下载、导出可直接使用，AI 费用由用户自己的服务商账户承担。</p>
+          </article>
+          <article class="growth-card wide">
+            <div>
+              <h2>数据默认留在本机</h2>
+              <p>API Key 与任务数据保存在本机 chrome.storage.local；AI 请求由本机直连你配置的服务商 API。</p>
+            </div>
+            <div class="privacy-list">
+              <span>不收集姓名、邮箱等身份信息</span>
+              <span>仅主动点击提取时读取当前页面</span>
+              <span>Key 不上传开发者服务器</span>
+            </div>
+          </article>
+        </div>
+
+        <footer class="footer-note">
+          <span>交流反馈：添加微信 13096375299</span>
+          <span class="qr" aria-hidden="true">
+            <i></i><i></i><i></i><i></i><i></i>
+            <i></i><i></i><i></i><i></i><i></i>
+            <i></i><i></i><i></i><i></i><i></i>
+            <i></i><i></i><i></i><i></i><i></i>
+            <i></i><i></i><i></i><i></i><i></i>
+          </span>
+        </footer>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const statusText = document.getElementById('captureStatus')
+    const downloadCurrentButton = document.getElementById('downloadCurrent')
+    const downloadAllButton = document.getElementById('downloadAll')
+    const shots = Array.from(document.querySelectorAll('.shot'))
+    const W = 1080
+    const H = 1440
+    const RED = '#ff2442'
+    const RED_DARK = '#d81834'
+    const INK = '#1f1f24'
+    const MUTED = '#616571'
+    const PAPER = '#fffaf7'
+    const FONT = '"PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", Arial, sans-serif'
+
+    const posterMap = {
+      '01-产品总览': {
+        tag: '浏览器侧栏插件',
+        sub: '小红书笔记提取与 AI 创作助手',
+        kicker: '从收藏灵感到可发布草稿',
+        title: ['把小红书笔记', '一键变成创作素材库'],
+        lead: '提取图文、分析爆款逻辑、生成类似笔记、制作配图，还能辅助自动获客。',
+      },
+      '02-核心功能': {
+        tag: '核心能力',
+        sub: '让内容拆解和复用更省力',
+        kicker: '内容工作流全打通',
+        title: ['不是简单复制', '是把笔记变成可复用资产'],
+        lead: '适合内容运营、品牌种草、素材研究、竞品分析和日常创作积累。',
+      },
+      '03-提取导出': {
+        tag: '无需 Key 可用',
+        sub: '先把好内容稳稳收进来',
+        kicker: '提取 · 下载 · 导出',
+        title: ['看到一篇好笔记', '不用手动整理半小时'],
+        lead: '在笔记详情页点击一次，公开可见内容自动成为独立任务，后续分析、仿写互不影响。',
+      },
+      '04-AI分析': {
+        tag: '自备 API Key',
+        sub: 'AI 帮你读懂爆款笔记',
+        kicker: 'AI 拆解爆款逻辑',
+        title: ['不只看热闹', '还看它为什么会火'],
+        lead: '从标题钩子、内容结构、情绪价值、评论诱因到可复用写法，帮你把灵感拆成方法。',
+      },
+      '05-仿写配图': {
+        tag: '增强能力',
+        sub: '从分析走到创作和获客',
+        kicker: '生成草稿 · 制作配图 · 自动获客',
+        title: ['灵感不用停在收藏夹', '下一篇内容直接开写'],
+        lead: '基于 AI 分析结果生成类似笔记，标题、正文、标签都可编辑，并自动保存。',
+      },
+      '06-自动获客与隐私': {
+        tag: '增长 + 隐私',
+        sub: '更适合长期经营的小工具',
+        kicker: '涨粉自动获客模块',
+        title: ['内容之外', '也照顾你的增长动作'],
+        lead: '按关键词搜索和筛选潜在互动对象，沉淀互动记录，让增长动作更有秩序。',
+      },
+    }
+
+    function setBusy(isBusy, message) {
+      statusText.textContent = message
+      downloadCurrentButton.disabled = isBusy
+      downloadAllButton.disabled = isBusy
+    }
+
+    function getCurrentShot() {
+      const viewportCenter = window.innerHeight / 2
+      return shots
+        .map((shot) => {
+          const rect = shot.getBoundingClientRect()
+          return {
+            shot,
+            distance: Math.abs(rect.top + rect.height / 2 - viewportCenter),
+          }
+        })
+        .sort((a, b) => a.distance - b.distance)[0]?.shot ?? shots[0]
+    }
+
+    function fileNameFor(shot) {
+      return `薯薯小抄-v1.3.1-${shot.dataset.title || '宣传图'}.png`
+    }
+
+    function downloadBlob(blob, fileName) {
+      const link = document.createElement('a')
+      const url = URL.createObjectURL(blob)
+      link.href = url
+      link.download = fileName
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+    }
+
+    function canvasToBlob(canvas) {
+      return new Promise((resolve, reject) => {
+        canvas.toBlob((blob) => {
+          if (blob) resolve(blob)
+          else reject(new Error('PNG 生成失败，请用新版 Chrome 或 Edge 再试一次。'))
+        }, 'image/png')
+      })
+    }
+
+    function font(size, weight = 700) {
+      return `${weight} ${size}px ${FONT}`
+    }
+
+    function rounded(ctx, x, y, w, h, r) {
+      const radius = Math.min(r, w / 2, h / 2)
+      ctx.beginPath()
+      ctx.moveTo(x + radius, y)
+      ctx.arcTo(x + w, y, x + w, y + h, radius)
+      ctx.arcTo(x + w, y + h, x, y + h, radius)
+      ctx.arcTo(x, y + h, x, y, radius)
+      ctx.arcTo(x, y, x + w, y, radius)
+      ctx.closePath()
+    }
+
+    function fillRound(ctx, x, y, w, h, r, fill, shadow) {
+      ctx.save()
+      if (shadow) {
+        ctx.shadowColor = shadow.color
+        ctx.shadowBlur = shadow.blur
+        ctx.shadowOffsetY = shadow.y
+      }
+      rounded(ctx, x, y, w, h, r)
+      ctx.fillStyle = fill
+      ctx.fill()
+      ctx.restore()
+    }
+
+    function strokeRound(ctx, x, y, w, h, r, color, width = 1) {
+      rounded(ctx, x, y, w, h, r)
+      ctx.strokeStyle = color
+      ctx.lineWidth = width
+      ctx.stroke()
+    }
+
+    function linear(ctx, x0, y0, x1, y1, stops) {
+      const gradient = ctx.createLinearGradient(x0, y0, x1, y1)
+      stops.forEach(([offset, color]) => gradient.addColorStop(offset, color))
+      return gradient
+    }
+
+    function drawText(ctx, text, x, y, options = {}) {
+      const {
+        size = 24,
+        weight = 700,
+        color = INK,
+        lineHeight = size * 1.35,
+        maxWidth = 900,
+        align = 'left',
+      } = options
+      ctx.save()
+      ctx.font = font(size, weight)
+      ctx.fillStyle = color
+      ctx.textBaseline = 'top'
+      ctx.textAlign = align
+      const lines = wrapText(ctx, text, maxWidth)
+      lines.forEach((line, index) => {
+        ctx.fillText(line, x, y + index * lineHeight)
+      })
+      ctx.restore()
+      return y + lines.length * lineHeight
+    }
+
+    function wrapText(ctx, text, maxWidth) {
+      const paragraphs = String(text).split('\n')
+      const lines = []
+      paragraphs.forEach((paragraph) => {
+        let line = ''
+        Array.from(paragraph).forEach((char) => {
+          const next = line + char
+          if (line && ctx.measureText(next).width > maxWidth) {
+            lines.push(line)
+            line = char
+          } else {
+            line = next
+          }
+        })
+        if (line) lines.push(line)
+      })
+      return lines
+    }
+
+    function drawPill(ctx, text, x, y, options = {}) {
+      const {
+        fill = 'rgba(255, 36, 66, 0.10)',
+        color = RED_DARK,
+        border = 'rgba(255, 36, 66, 0.22)',
+        size = 18,
+        weight = 900,
+        padX = 22,
+        height = 48,
+      } = options
+      ctx.save()
+      ctx.font = font(size, weight)
+      const width = ctx.measureText(text).width + padX * 2
+      fillRound(ctx, x, y, width, height, height / 2, fill)
+      strokeRound(ctx, x, y, width, height, height / 2, border, 1)
+      ctx.fillStyle = color
+      ctx.textBaseline = 'middle'
+      ctx.fillText(text, x + padX, y + height / 2)
+      ctx.restore()
+      return width
+    }
+
+    function drawBackground(ctx) {
+      ctx.fillStyle = PAPER
+      ctx.fillRect(0, 0, W, H)
+      ctx.fillStyle = linear(ctx, 0, 0, W, H, [
+        [0, '#fff8f0'],
+        [0.52, '#fff4f5'],
+        [1, '#eefaf6'],
+      ])
+      ctx.fillRect(0, 0, W, H)
+
+      const redGlow = ctx.createRadialGradient(110, 160, 10, 110, 160, 360)
+      redGlow.addColorStop(0, 'rgba(255,36,66,0.23)')
+      redGlow.addColorStop(1, 'rgba(255,36,66,0)')
+      ctx.fillStyle = redGlow
+      ctx.fillRect(0, 0, W, H)
+
+      const greenGlow = ctx.createRadialGradient(970, 90, 10, 970, 90, 380)
+      greenGlow.addColorStop(0, 'rgba(95,202,159,0.24)')
+      greenGlow.addColorStop(1, 'rgba(95,202,159,0)')
+      ctx.fillStyle = greenGlow
+      ctx.fillRect(0, 0, W, H)
+
+      ctx.save()
+      ctx.globalAlpha = 0.08
+      ctx.strokeStyle = INK
+      ctx.lineWidth = 1
+      for (let x = 0; x <= W; x += 54) {
+        ctx.beginPath()
+        ctx.moveTo(x, 0)
+        ctx.lineTo(x, 1120)
+        ctx.stroke()
+      }
+      for (let y = 0; y <= 1120; y += 54) {
+        ctx.beginPath()
+        ctx.moveTo(0, y)
+        ctx.lineTo(W, y)
+        ctx.stroke()
+      }
+      ctx.restore()
+    }
+
+    function drawBrand(ctx, sub, tag) {
+      const logoFill = linear(ctx, 72, 78, 146, 152, [
+        [0, RED],
+        [1, '#ff6a3d'],
+      ])
+      fillRound(ctx, 72, 78, 74, 74, 22, logoFill, {
+        color: 'rgba(255,36,66,0.28)',
+        blur: 30,
+        y: 14,
+      })
+      ctx.fillStyle = '#ffffff'
+      ctx.font = font(32, 950)
+      ctx.textBaseline = 'middle'
+      ctx.textAlign = 'center'
+      ctx.fillText('抄', 109, 116)
+
+      drawText(ctx, '薯薯小抄', 162, 80, {
+        size: 34,
+        weight: 950,
+        lineHeight: 38,
+        maxWidth: 360,
+      })
+      drawText(ctx, sub, 162, 124, {
+        size: 18,
+        weight: 700,
+        color: MUTED,
+        maxWidth: 430,
+      })
+      drawPill(ctx, tag, 1080 - 72 - textPillWidth(ctx, tag), 92)
+    }
+
+    function textPillWidth(ctx, text, size = 18, weight = 900, padX = 22) {
+      ctx.save()
+      ctx.font = font(size, weight)
+      const width = ctx.measureText(text).width + padX * 2
+      ctx.restore()
+      return width
+    }
+
+    function drawHero(ctx, meta) {
+      ctx.save()
+      ctx.strokeStyle = RED
+      ctx.lineWidth = 6
+      ctx.lineCap = 'round'
+      ctx.beginPath()
+      ctx.moveTo(72, 220)
+      ctx.lineTo(114, 220)
+      ctx.stroke()
+      drawText(ctx, meta.kicker, 128, 207, {
+        size: 22,
+        weight: 950,
+        color: RED_DARK,
+        maxWidth: 720,
+      })
+      drawText(ctx, meta.title[0], 72, 260, {
+        size: 74,
+        weight: 950,
+        lineHeight: 78,
+        maxWidth: 900,
+      })
+      drawText(ctx, meta.title[1], 72, 338, {
+        size: 74,
+        weight: 950,
+        color: RED,
+        lineHeight: 78,
+        maxWidth: 900,
+      })
+      drawText(ctx, meta.lead, 72, 444, {
+        size: 29,
+        weight: 700,
+        color: '#414550',
+        lineHeight: 42,
+        maxWidth: 850,
+      })
+      ctx.restore()
+    }
+
+    function drawMetric(ctx, x, y, title, body) {
+      fillRound(ctx, x, y, 294, 122, 28, 'rgba(255,255,255,0.76)', {
+        color: 'rgba(56,49,45,0.12)',
+        blur: 24,
+        y: 12,
+      })
+      strokeRound(ctx, x, y, 294, 122, 28, 'rgba(31,31,36,0.10)', 1)
+      drawText(ctx, title, x + 22, y + 20, {
+        size: 30,
+        weight: 950,
+        color: RED,
+        lineHeight: 34,
+        maxWidth: 250,
+      })
+      drawText(ctx, body, x + 22, y + 64, {
+        size: 18,
+        weight: 800,
+        color: '#525762',
+        lineHeight: 25,
+        maxWidth: 240,
+      })
+    }
+
+    function drawLine(ctx, x, y, w, h, radiusOrColor = '#e7e8ec', color) {
+      const radius = typeof radiusOrColor === 'number' ? radiusOrColor : h / 2
+      const fill = color || (typeof radiusOrColor === 'string' ? radiusOrColor : '#e7e8ec')
+      fillRound(ctx, x, y, w, h, radius, fill)
+    }
+
+    function drawPoster01(ctx) {
+      const browserX = 400
+      const browserY = 620
+      fillRound(ctx, browserX, browserY, 608, 560, 32, 'rgba(255,255,255,0.86)', {
+        color: 'rgba(45,43,39,0.18)',
+        blur: 42,
+        y: 22,
+      })
+      strokeRound(ctx, browserX, browserY, 608, 560, 32, 'rgba(31,31,36,0.12)', 2)
+      fillRound(ctx, browserX, browserY, 608, 70, 32, 'rgba(255,255,255,0.72)')
+      ctx.fillStyle = '#ff6b6b'
+      ctx.beginPath()
+      ctx.arc(browserX + 30, browserY + 35, 8, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.fillStyle = '#ffca3a'
+      ctx.beginPath()
+      ctx.arc(browserX + 54, browserY + 35, 8, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.fillStyle = '#4ecb7f'
+      ctx.beginPath()
+      ctx.arc(browserX + 78, browserY + 35, 8, 0, Math.PI * 2)
+      ctx.fill()
+      fillRound(ctx, browserX + 112, browserY + 18, 450, 34, 17, '#f4f5f7')
+      drawText(ctx, 'xiaohongshu.com/explore/...', browserX + 130, browserY + 24, {
+        size: 16,
+        weight: 800,
+        color: '#9297a2',
+        maxWidth: 380,
+      })
+
+      fillRound(ctx, browserX + 26, browserY + 96, 210, 400, 26, linear(ctx, browserX, browserY, browserX + 236, browserY + 496, [
+        [0, '#ff2442'],
+        [1, '#ffd166'],
+      ]))
+      drawLine(ctx, browserX + 54, browserY + 414, 128, 18, 9, 'rgba(255,255,255,0.82)')
+      drawLine(ctx, browserX + 54, browserY + 448, 160, 18, 9, 'rgba(255,255,255,0.72)')
+
+      drawLine(ctx, browserX + 266, browserY + 112, 290, 30, 15, INK)
+      drawLine(ctx, browserX + 266, browserY + 174, 270, 18)
+      drawLine(ctx, browserX + 266, browserY + 214, 240, 18)
+      drawLine(ctx, browserX + 266, browserY + 254, 180, 18)
+      ;['标题', '正文', '标签', '图片'].forEach((text, index) => {
+        drawPill(ctx, text, browserX + 266 + (index % 2) * 92, browserY + 320 + Math.floor(index / 2) * 50, {
+          height: 34,
+          size: 15,
+          padX: 14,
+        })
+      })
+
+      fillRound(ctx, 72, 720, 404, 430, 34, '#202126', {
+        color: 'rgba(16,19,25,0.28)',
+        blur: 46,
+        y: 24,
+      })
+      drawText(ctx, '笔记分析', 94, 744, {
+        size: 24,
+        weight: 950,
+        color: '#ffffff',
+        maxWidth: 170,
+      })
+      drawPill(ctx, 'AI Ready', 350, 742, {
+        fill: 'rgba(255,36,66,0.22)',
+        color: '#ffc8d1',
+        border: 'rgba(255,255,255,0.06)',
+        height: 32,
+        size: 13,
+        padX: 13,
+      })
+      drawPanelCard(ctx, 94, 804, '提取当前笔记', '标题、正文、标签、互动数据与图片列表，整理进本机任务。')
+      drawPanelCard(ctx, 94, 928, '生成类似笔记', '基于结构拆解，输入推广主题即可生成可编辑草稿。')
+      fillRound(ctx, 94, 1068, 360, 58, 18, linear(ctx, 94, 1068, 454, 1126, [
+        [0, RED],
+        [1, '#ff6a3d'],
+      ]))
+      drawText(ctx, '提取 → 分析 → 创作', 188, 1085, {
+        size: 20,
+        weight: 950,
+        color: '#ffffff',
+        maxWidth: 220,
+      })
+
+      drawMetric(ctx, 72, 1258, '1 键', '抓取公开笔记内容')
+      drawMetric(ctx, 393, 1258, 'Markdown', '复制与批量导出')
+      drawMetric(ctx, 714, 1258, '本机存储', 'Key 与任务不上传')
+    }
+
+    function drawPanelCard(ctx, x, y, title, body) {
+      fillRound(ctx, x, y, 360, 108, 22, 'rgba(255,255,255,0.08)')
+      strokeRound(ctx, x, y, 360, 108, 22, 'rgba(255,255,255,0.12)', 1)
+      drawText(ctx, title, x + 20, y + 18, {
+        size: 21,
+        weight: 950,
+        color: '#ffffff',
+        maxWidth: 310,
+      })
+      drawText(ctx, body, x + 20, y + 52, {
+        size: 16,
+        weight: 700,
+        color: 'rgba(255,255,255,0.72)',
+        lineHeight: 24,
+        maxWidth: 310,
+      })
+    }
+
+    function drawFeature(ctx, x, y, fill, icon, title, body) {
+      fillRound(ctx, x, y, 450, 270, 30, fill, {
+        color: 'rgba(70,52,56,0.12)',
+        blur: 30,
+        y: 14,
+      })
+      strokeRound(ctx, x, y, 450, 270, 30, 'rgba(31,31,36,0.10)', 2)
+      fillRound(ctx, x + 28, y + 28, 70, 70, 22, INK)
+      drawText(ctx, icon, x + 49, y + 43, {
+        size: 32,
+        weight: 950,
+        color: '#ffffff',
+        maxWidth: 36,
+      })
+      drawText(ctx, title, x + 28, y + 124, {
+        size: 34,
+        weight: 950,
+        lineHeight: 39,
+        maxWidth: 360,
+      })
+      drawText(ctx, body, x + 28, y + 178, {
+        size: 22,
+        weight: 700,
+        color: '#555b66',
+        lineHeight: 32,
+        maxWidth: 360,
+      })
+    }
+
+    function drawPoster02(ctx) {
+      drawFeature(ctx, 72, 590, 'rgba(255,255,255,0.78)', '提', '一键提取笔记', '标题、正文、标签、互动数据、图片链接一次整理。')
+      drawFeature(ctx, 558, 590, 'rgba(223,248,239,0.86)', '导', '复制与导出', '支持 Markdown、纯文本、图片链接和全部笔记汇总。')
+      drawFeature(ctx, 72, 884, 'rgba(223,238,255,0.86)', '析', 'AI 深度分析', '拆结构、看钩子、读情绪、总结传播逻辑和创作建议。')
+      drawFeature(ctx, 558, 884, 'rgba(255,242,168,0.82)', '写', '仿写与配图', '输入推广主题，生成类似笔记草稿和图片创作提示。')
+      const steps = [
+        ['01', '打开小红书笔记详情页'],
+        ['02', '侧栏点击提取当前笔记'],
+        ['03', 'AI 分析结构与爆款逻辑'],
+        ['04', '编辑草稿后复制发布'],
+      ]
+      steps.forEach(([num, text], index) => {
+        const x = 72 + index * 237
+        fillRound(ctx, x, 1195, 220, 150, 26, '#ffffff', {
+          color: 'rgba(70,52,56,0.10)',
+          blur: 22,
+          y: 10,
+        })
+        strokeRound(ctx, x, 1195, 220, 150, 26, 'rgba(31,31,36,0.12)', 1)
+        drawText(ctx, num, x + 18, 1217, {
+          size: 23,
+          weight: 950,
+          color: RED,
+          maxWidth: 160,
+        })
+        drawText(ctx, text, x + 18, 1262, {
+          size: 17,
+          weight: 850,
+          color: '#454a55',
+          lineHeight: 24,
+          maxWidth: 170,
+        })
+      })
+      drawText(ctx, '基础提取、复制、下载、导出无需 API Key；AI 能力按需自备 Key 使用。', 72, 1360, {
+        size: 19,
+        weight: 800,
+        color: '#595f69',
+        maxWidth: 860,
+      })
+    }
+
+    function drawPoster03(ctx) {
+      fillRound(ctx, 72, 600, 390, 720, 46, '#1f1f24', {
+        color: 'rgba(31,31,36,0.28)',
+        blur: 48,
+        y: 24,
+      })
+      fillRound(ctx, 96, 624, 342, 672, 34, '#fffafa')
+      fillRound(ctx, 204, 648, 126, 12, 6, 'rgba(31,31,36,0.16)')
+      fillRound(ctx, 120, 690, 138, 42, 14, RED)
+      drawText(ctx, '笔记', 172, 701, {
+        size: 15,
+        weight: 950,
+        color: '#ffffff',
+        maxWidth: 40,
+      })
+      fillRound(ctx, 268, 690, 146, 42, 14, '#f1f2f5')
+      drawText(ctx, 'AI 分析', 306, 701, {
+        size: 15,
+        weight: 950,
+        color: '#868b96',
+        maxWidth: 80,
+      })
+      fillRound(ctx, 120, 760, 294, 270, 24, '#ffffff', {
+        color: 'rgba(45,43,39,0.10)',
+        blur: 20,
+        y: 10,
+      })
+      strokeRound(ctx, 120, 760, 294, 270, 24, 'rgba(31,31,36,0.10)', 1)
+      drawLine(ctx, 142, 784, 206, 24, 12, INK)
+      drawLine(ctx, 142, 832, 238, 14, 7)
+      drawLine(ctx, 142, 864, 218, 14, 7)
+      drawLine(ctx, 142, 896, 170, 14, 7)
+      ;['#ff8a9a', '#8bd3c7', '#a9c9ff'].forEach((color, index) => {
+        fillRound(ctx, 142 + index * 84, 940, 72, 72, 16, color)
+      })
+      fillRound(ctx, 120, 1052, 294, 58, 18, linear(ctx, 120, 1052, 414, 1110, [
+        [0, RED],
+        [1, '#ff6a3d'],
+      ]))
+      drawText(ctx, '复制 Markdown', 194, 1070, {
+        size: 20,
+        weight: 950,
+        color: '#ffffff',
+        maxWidth: 170,
+      })
+      fillRound(ctx, 120, 1132, 294, 92, 24, '#ffffff')
+      drawLine(ctx, 142, 1160, 228, 14, 7)
+      drawLine(ctx, 142, 1194, 170, 14, 7)
+
+      const items = [
+        ['✓', '图文信息自动归档', '标题、正文、标签、互动数据、图片列表都能统一预览。'],
+        ['↓', '图片支持单张/批量下载', '做素材收集、复盘参考、团队协作时更省事。'],
+        ['M', 'Markdown 一键导出', '复制正文、复制图片链接，或把全部笔记汇总成一个 .md 文件。'],
+      ]
+      items.forEach(([icon, title, body], index) => {
+        const y = 620 + index * 214
+        fillRound(ctx, 500, y, 508, 180, 28, 'rgba(255,255,255,0.78)', {
+          color: 'rgba(70,52,56,0.12)',
+          blur: 24,
+          y: 12,
+        })
+        strokeRound(ctx, 500, y, 508, 180, 28, 'rgba(31,31,36,0.10)', 1)
+        fillRound(ctx, 524, y + 24, 56, 56, 18, RED)
+        drawText(ctx, icon, 543, y + 37, {
+          size: 28,
+          weight: 950,
+          color: '#ffffff',
+          maxWidth: 32,
+        })
+        drawText(ctx, title, 598, y + 22, {
+          size: 31,
+          weight: 950,
+          lineHeight: 36,
+          maxWidth: 370,
+        })
+        drawText(ctx, body, 598, y + 78, {
+          size: 20,
+          weight: 700,
+          color: '#565c67',
+          lineHeight: 29,
+          maxWidth: 360,
+        })
+      })
+      drawText(ctx, '适合：竞品资料库、爆款案例库、内容复盘、选题素材池。', 72, 1362, {
+        size: 19,
+        weight: 800,
+        color: '#595f69',
+        maxWidth: 840,
+      })
+    }
+
+    function drawAnalysisCard(ctx, x, y, w, h, title, body, dark = false) {
+      fillRound(ctx, x, y, w, h, 32, dark ? '#202126' : 'rgba(255,255,255,0.84)', {
+        color: dark ? 'rgba(31,31,36,0.18)' : 'rgba(70,52,56,0.10)',
+        blur: 26,
+        y: 12,
+      })
+      strokeRound(ctx, x, y, w, h, 32, dark ? 'rgba(255,255,255,0.08)' : 'rgba(31,31,36,0.10)', 1)
+      drawText(ctx, title, x + 28, y + 26, {
+        size: 35,
+        weight: 950,
+        color: dark ? '#ffffff' : INK,
+        lineHeight: 40,
+        maxWidth: w - 56,
+      })
+      drawText(ctx, body, x + 28, y + 112, {
+        size: 21,
+        weight: 700,
+        color: dark ? 'rgba(255,255,255,0.74)' : '#575d68',
+        lineHeight: 31,
+        maxWidth: w - 56,
+      })
+    }
+
+    function drawPoster04(ctx) {
+      drawAnalysisCard(ctx, 72, 580, 450, 360, '爆款要素评分', '把笔记的吸引力拆成可观察维度，快速定位值得学习的地方。', true)
+      ;[
+        ['标题钩子', '92%', 0.92],
+        ['结构清晰度', '86%', 0.86],
+        ['收藏价值', '89%', 0.89],
+      ].forEach(([label, score, value], index) => {
+        const y = 770 + index * 58
+        drawText(ctx, label, 100, y, {
+          size: 18,
+          weight: 850,
+          color: 'rgba(255,255,255,0.74)',
+          maxWidth: 180,
+        })
+        drawText(ctx, score, 430, y, {
+          size: 20,
+          weight: 950,
+          color: '#ffffff',
+          maxWidth: 70,
+        })
+        fillRound(ctx, 100, y + 34, 364, 13, 7, 'rgba(255,255,255,0.14)')
+        fillRound(ctx, 100, y + 34, 364 * value, 13, 7, linear(ctx, 100, y, 464, y, [
+          [0, RED],
+          [1, '#ffcf5a'],
+        ]))
+      })
+      drawAnalysisCard(ctx, 558, 580, 450, 360, '结构拆解', '开头如何抓人，中段如何铺信息，结尾如何引导收藏、评论或转化。支持勾选图片参与识图。')
+      fillRound(ctx, 72, 970, 936, 176, 32, linear(ctx, 72, 970, 1008, 1146, [
+        [0, RED],
+        [1, '#ff7246'],
+      ]), {
+        color: 'rgba(255,36,66,0.18)',
+        blur: 30,
+        y: 14,
+      })
+      drawText(ctx, '把“感觉不错”变成“我知道该学哪一段”。', 104, 1000, {
+        size: 32,
+        weight: 950,
+        color: '#ffffff',
+        maxWidth: 780,
+      })
+      drawText(ctx, '适合做选题复盘、账号定位研究、品牌种草内容拆解和内容团队内部沉淀。', 104, 1064, {
+        size: 21,
+        weight: 700,
+        color: 'rgba(255,255,255,0.90)',
+        lineHeight: 31,
+        maxWidth: 830,
+      })
+      drawAnalysisCard(ctx, 72, 1176, 450, 180, '可复制建议', '输出创作建议后，可复制纯文本或 Markdown。')
+      drawAnalysisCard(ctx, 558, 1176, 450, 180, '后台持续运行', '独立任务持续处理，列表中可查看进度。')
+    }
+
+    function drawPoster05(ctx) {
+      fillRound(ctx, 72, 580, 580, 650, 34, 'rgba(255,255,255,0.84)', {
+        color: 'rgba(70,52,56,0.12)',
+        blur: 28,
+        y: 14,
+      })
+      strokeRound(ctx, 72, 580, 580, 650, 34, 'rgba(31,31,36,0.10)', 1)
+      drawPill(ctx, '类似笔记', 102, 610, {
+        fill: RED,
+        color: '#ffffff',
+        border: RED,
+        height: 44,
+        size: 17,
+        padX: 18,
+      })
+      drawPill(ctx, '自动保存', 222, 610, {
+        fill: INK,
+        color: '#ffffff',
+        border: INK,
+        height: 44,
+        size: 17,
+        padX: 18,
+      })
+      drawPill(ctx, '可复制', 350, 610, {
+        fill: INK,
+        color: '#ffffff',
+        border: INK,
+        height: 44,
+        size: 17,
+        padX: 18,
+      })
+      fillRound(ctx, 102, 686, 520, 102, 22, '#fff1f0')
+      drawText(ctx, '3 个让新手也能快速上手的小红书选题方法', 124, 706, {
+        size: 28,
+        weight: 950,
+        color: RED_DARK,
+        lineHeight: 36,
+        maxWidth: 470,
+      })
+      ;[520, 478, 410, 456, 330].forEach((width, index) => {
+        drawLine(ctx, 102, 838 + index * 44, width, 20, 10, '#e9ebef')
+      })
+      ;['#小红书运营', '#内容创作', '#选题方法', '#自媒体工具'].forEach((tag, index) => {
+        const x = 102 + (index % 2) * 188
+        const y = 1090 + Math.floor(index / 2) * 50
+        drawPill(ctx, tag, x, y, {
+          fill: '#dff8ef',
+          color: '#0f766e',
+          border: '#dff8ef',
+          height: 36,
+          size: 16,
+          padX: 15,
+        })
+      })
+
+      const cards = [
+        ['推广主题仿写', '输入你的产品、服务或账号方向，生成结构相似但内容可编辑的新笔记。', ['#202126', '#393b46']],
+        ['AI 配图创作', '支持文生图，也可上传、拖拽、粘贴参考图做图生图。', ['#0f766e', '#79d7be']],
+        ['发布前更顺手', '复制内容，下载配图，跳转小红书发布页自行粘贴上传。', [RED, '#ffc24f']],
+      ]
+      cards.forEach(([title, body, colors], index) => {
+        const y = 580 + index * 218
+        fillRound(ctx, 676, y, 332, 196, 30, linear(ctx, 676, y, 1008, y + 196, [
+          [0, colors[0]],
+          [1, colors[1]],
+        ]), {
+          color: 'rgba(31,31,36,0.18)',
+          blur: 28,
+          y: 14,
+        })
+        ctx.save()
+        ctx.globalAlpha = 0.2
+        ctx.translate(884, y + 124)
+        ctx.rotate(0.3)
+        fillRound(ctx, 0, 0, 160, 160, 40, '#ffffff')
+        ctx.restore()
+        drawText(ctx, title, 698, y + 24, {
+          size: 28,
+          weight: 950,
+          color: '#ffffff',
+          maxWidth: 250,
+        })
+        drawText(ctx, body, 698, y + 76, {
+          size: 19,
+          weight: 750,
+          color: 'rgba(255,255,255,0.88)',
+          lineHeight: 27,
+          maxWidth: 250,
+        })
+      })
+    }
+
+    function drawGrowthCard(ctx, x, y, w, h, title, body) {
+      fillRound(ctx, x, y, w, h, 34, 'rgba(255,255,255,0.84)', {
+        color: 'rgba(70,52,56,0.11)',
+        blur: 28,
+        y: 14,
+      })
+      strokeRound(ctx, x, y, w, h, 34, 'rgba(31,31,36,0.10)', 1)
+      drawText(ctx, title, x + 30, y + 30, {
+        size: 36,
+        weight: 950,
+        lineHeight: 40,
+        maxWidth: w - 60,
+      })
+      drawText(ctx, body, x + 30, y + 108, {
+        size: 22,
+        weight: 700,
+        color: '#565c67',
+        lineHeight: 32,
+        maxWidth: w - 60,
+      })
+    }
+
+    function drawPoster06(ctx) {
+      drawGrowthCard(ctx, 72, 590, 450, 210, '关键词自动筛选', '围绕目标领域寻找相关内容和互动对象，减少重复手动操作。')
+      drawGrowthCard(ctx, 558, 590, 450, 210, '互动记录沉淀', '记录获客过程，便于回看、清理和管理历史动作。')
+      drawGrowthCard(ctx, 72, 824, 450, 210, '侧栏轻量运行', '不用离开当前浏览器工作流，笔记分析与增长模块可切换使用。')
+      drawGrowthCard(ctx, 558, 824, 450, 210, '基础功能免费', '提取、复制、下载、导出可直接使用，AI 费用由用户自己的服务商账户承担。')
+      fillRound(ctx, 72, 1060, 936, 246, 34, '#202126', {
+        color: 'rgba(31,31,36,0.22)',
+        blur: 32,
+        y: 16,
+      })
+      drawText(ctx, '数据默认留在本机', 104, 1092, {
+        size: 36,
+        weight: 950,
+        color: '#ffffff',
+        maxWidth: 410,
+      })
+      drawText(ctx, 'API Key 与任务数据保存在本机 chrome.storage.local；AI 请求由本机直连你配置的服务商 API。', 104, 1160, {
+        size: 22,
+        weight: 700,
+        color: 'rgba(255,255,255,0.76)',
+        lineHeight: 32,
+        maxWidth: 440,
+      })
+      ;['不收集姓名、邮箱等身份信息', '仅主动点击提取时读取当前页面', 'Key 不上传开发者服务器'].forEach((text, index) => {
+        fillRound(ctx, 570, 1090 + index * 64, 390, 52, 17, 'rgba(255,255,255,0.10)')
+        drawText(ctx, text, 588, 1105 + index * 64, {
+          size: 18,
+          weight: 850,
+          color: 'rgba(255,255,255,0.90)',
+          maxWidth: 340,
+        })
+      })
+      drawText(ctx, '交流反馈：添加微信 13096375299', 72, 1354, {
+        size: 19,
+        weight: 850,
+        color: '#595f69',
+        maxWidth: 520,
+      })
+      fillRound(ctx, 870, 1260, 138, 138, 24, '#ffffff', {
+        color: 'rgba(70,52,56,0.10)',
+        blur: 22,
+        y: 10,
+      })
+      for (let i = 0; i < 25; i += 1) {
+        const col = i % 5
+        const row = Math.floor(i / 5)
+        const active = [0, 1, 2, 4, 5, 7, 10, 12, 14, 17, 18, 20, 22, 23, 24].includes(i)
+        if (active) fillRound(ctx, 884 + col * 24, 1274 + row * 24, 16, 16, 4, i % 3 === 0 ? RED : INK)
+      }
+    }
+
+    async function renderShotToBlob(shot) {
+      if (document.fonts?.ready) await document.fonts.ready
+      const canvas = document.createElement('canvas')
+      canvas.width = W
+      canvas.height = H
+      const ctx = canvas.getContext('2d')
+      const title = shot.dataset.title || '01-产品总览'
+      const meta = posterMap[title] || posterMap['01-产品总览']
+
+      drawBackground(ctx)
+      drawBrand(ctx, meta.sub, meta.tag)
+      drawHero(ctx, meta)
+
+      if (title === '01-产品总览') drawPoster01(ctx)
+      if (title === '02-核心功能') drawPoster02(ctx)
+      if (title === '03-提取导出') drawPoster03(ctx)
+      if (title === '04-AI分析') drawPoster04(ctx)
+      if (title === '05-仿写配图') drawPoster05(ctx)
+      if (title === '06-自动获客与隐私') drawPoster06(ctx)
+
+      return canvasToBlob(canvas)
+    }
+
+    async function downloadShot(shot) {
+      const blob = await renderShotToBlob(shot)
+      downloadBlob(blob, fileNameFor(shot))
+    }
+
+    downloadCurrentButton.addEventListener('click', async () => {
+      const shot = getCurrentShot()
+      try {
+        setBusy(true, `正在生成：${shot.dataset.title || '当前海报'}...`)
+        await downloadShot(shot)
+        setBusy(false, '当前海报已开始下载。')
+      } catch (error) {
+        setBusy(false, error instanceof Error ? error.message : '下载失败，请改用浏览器截图。')
+      }
+    })
+
+    downloadAllButton.addEventListener('click', async () => {
+      try {
+        setBusy(true, '正在批量生成宣传图...')
+        for (const [index, shot] of shots.entries()) {
+          setBusy(true, `正在下载第 ${index + 1} / ${shots.length} 张：${shot.dataset.title || '宣传图'}...`)
+          await downloadShot(shot)
+          await new Promise((resolve) => window.setTimeout(resolve, 260))
+        }
+        setBusy(false, '全部宣传图已开始下载。')
+      } catch (error) {
+        setBusy(false, error instanceof Error ? error.message : '批量下载失败，请改用浏览器截图。')
+      }
+    })
+  </script>
+</body>
+</html>
