@@ -6,6 +6,9 @@ export const ANALYZE_NOTE_MESSAGE = 'redcopy:analyze-note' as const
 export const EXPORT_CURRENT_NOTE_MARKDOWN_MESSAGE =
   'redcopy:export-current-note-markdown' as const
 export const DOWNLOAD_NOTE_IMAGE_MESSAGE = 'redcopy:download-note-image' as const
+export const DOWNLOAD_NOTE_MEDIA_MESSAGE = 'redcopy:download-note-media' as const
+export const INJECT_DETAIL_EXPORT_BUTTON_MESSAGE =
+  'redcopy:inject-detail-export-button' as const
 export const STORAGE_GET_MESSAGE = 'redcopy:storage-get' as const
 export const STORAGE_SET_MESSAGE = 'redcopy:storage-set' as const
 export const STORAGE_REMOVE_MESSAGE = 'redcopy:storage-remove' as const
@@ -59,6 +62,36 @@ export interface DownloadNoteImageRequest {
 export interface DownloadNoteImageResponse {
   ok: boolean
   error?: string
+}
+
+export type DownloadNoteMediaType = 'image' | 'video' | 'live'
+
+export interface DownloadNoteMediaRequest {
+  type: typeof DOWNLOAD_NOTE_MEDIA_MESSAGE
+  tabId?: number
+  url: string
+  index: number
+  mediaType: DownloadNoteMediaType
+  context?: {
+    title?: string
+    noteId?: string | null
+  }
+}
+
+export interface DownloadNoteMediaResponse {
+  ok: boolean
+  error?: string
+}
+
+export interface InjectDetailExportButtonRequest {
+  type: typeof INJECT_DETAIL_EXPORT_BUTTON_MESSAGE
+  tabId?: number
+}
+
+export interface InjectDetailExportButtonResponse {
+  ok: boolean
+  error?: string
+  result?: unknown
 }
 
 export interface StorageGetRequest {

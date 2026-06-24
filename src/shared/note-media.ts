@@ -1,4 +1,5 @@
 import type { NoteTextInfo } from './note-types'
+import type { DownloadNoteMediaType } from './messages'
 
 /** 获取笔记正文纯文本 */
 export function getNoteBodyText(note: NoteTextInfo): string {
@@ -19,6 +20,7 @@ export function formatImagesAsUrls(images: string[]): string {
 }
 
 const BLOB_URL_REVOKE_DELAY_MS = 60_000
+const FILENAME_MAX_LENGTH = 60
 
 function sanitizeFilename(name: string): string {
   return (
@@ -26,9 +28,33 @@ function sanitizeFilename(name: string): string {
       .replace(/[<>:"/\\|?*\u0000-\u001f\n\r]/g, '_')
       .replace(/[. ]+$/g, '')
       .trim()
-      .slice(0, 60)
+      .slice(0, FILENAME_MAX_LENGTH)
     || '未命名笔记'
   )
+}
+
+function sanitizeFilenameWithExtension(
+  name: string,
+  defaultExtension = '',
+): string {
+  const trimmed = name.trim()
+  const extensionMatch = trimmed.match(/(\.[a-z0-9]{1,8})$/i)
+  const rawExtension = extensionMatch?.[1] ?? defaultExtension
+  const extension = /^[.][a-z0-9]{1,8}$/i.test(rawExtension)
+    ? rawExtension
+    : ''
+  const rawBase = extensionMatch ? trimmed.slice(0, -extension.length) : trimmed
+  const baseMaxLength = Math.max(1, FILENAME_MAX_LENGTH - extension.length)
+  const base = (
+    rawBase
+      .replace(/[<>:"/\\|?*\u0000-\u001f\n\r]/g, '_')
+      .replace(/[. ]+$/g, '')
+      .trim()
+      .slice(0, baseMaxLength)
+    || '未命名笔记'
+  )
+
+  return `${base}${extension}`
 }
 
 function normalizeDownloadUrl(url: string): string {
@@ -66,6 +92,19 @@ function extensionFromMimeType(mimeType?: string): string | null {
       return '.bmp'
     case 'image/svg+xml':
       return '.svg'
+    case 'video/mp4':
+    case 'application/mp4':
+      return '.mp4'
+    case 'video/webm':
+      return '.webm'
+    case 'video/quicktime':
+      return '.mov'
+    case 'application/vnd.apple.mpegurl':
+    case 'application/x-mpegurl':
+    case 'audio/mpegurl':
+      return '.m3u8'
+    case 'video/mp2t':
+      return '.ts'
     default:
       return null
   }
@@ -85,6 +124,18 @@ export function guessImageExtension(url: string, mimeType?: string): string {
   return '.jpg'
 }
 
+function guessVideoExtension(url: string, mimeType?: string): string {
+  const mimeExt = extensionFromMimeType(mimeType)
+  if (mimeExt) return mimeExt
+
+  const lower = normalizeDownloadUrl(url).toLowerCase()
+  if (lower.includes('.m3u8') || lower.includes('m3u8')) return '.m3u8'
+  if (lower.includes('.webm') || lower.includes('webm')) return '.webm'
+  if (lower.includes('.mov') || lower.includes('quicktime')) return '.mov'
+  if (lower.includes('.ts')) return '.ts'
+  return '.mp4'
+}
+
 export interface ImageDownloadContext {
   title?: string
   noteId?: string | null
@@ -100,6 +151,21 @@ function buildImageFilename(
   const order = String(index + 1).padStart(2, '0')
   const ext = guessImageExtension(url, mimeType)
   return `薯薯小抄/${folder}/image-${order}${ext}`
+}
+
+function buildMediaFilename(
+  context: ImageDownloadContext,
+  index: number,
+  url: string,
+  mediaType: DownloadNoteMediaType,
+  mimeType?: string,
+): string {
+  const folder = sanitizeFilename(context.title || context.noteId || '笔记')
+  const order = String(index + 1).padStart(2, '0')
+  const ext = mediaType === 'image'
+    ? guessImageExtension(url, mimeType)
+    : guessVideoExtension(url, mimeType)
+  return `薯薯小抄/${folder}/${mediaType}-${order}${ext}`
 }
 
 function downloadByUrl(url: string, filename: string): Promise<number> {
@@ -154,6 +220,13 @@ async function createBlobDownloadUrl(url: string): Promise<BlobDownloadUrl> {
   }
 }
 
+function shouldFetchAsBlob(url: string, mediaType: DownloadNoteMediaType): boolean {
+  if (mediaType === 'image') return true
+
+  const lower = normalizeDownloadUrl(url).toLowerCase()
+  return lower.startsWith('data:')
+}
+
 async function downloadImageLikeUrl(
   url: string,
   buildFilename: (mimeType?: string) => string,
@@ -174,6 +247,39 @@ async function downloadImageLikeUrl(
     const detail = error instanceof Error ? error.message : String(error)
     console.warn('[RedCopy] Blob 图片下载失败，回退直链下载', {
       url: normalizedUrl,
+      detail,
+      error,
+    })
+    await downloadByUrl(normalizedUrl, buildFilename())
+  }
+}
+
+async function downloadMediaLikeUrl(
+  url: string,
+  mediaType: DownloadNoteMediaType,
+  buildFilename: (mimeType?: string) => string,
+): Promise<void> {
+  const normalizedUrl = normalizeDownloadUrl(url)
+  if (mediaType !== 'image' && normalizedUrl.startsWith('blob:')) {
+    throw new Error('视频 blob 地址只能在页面内播放，无法由后台直接下载')
+  }
+
+  if (!isHttpUrl(normalizedUrl) || !shouldFetchAsBlob(normalizedUrl, mediaType)) {
+    await downloadByUrl(normalizedUrl, buildFilename())
+    return
+  }
+
+  let blobDownload: BlobDownloadUrl | null = null
+  try {
+    blobDownload = await createBlobDownloadUrl(normalizedUrl)
+    await downloadByUrl(blobDownload.url, buildFilename(blobDownload.mimeType))
+    setTimeout(blobDownload.revoke, BLOB_URL_REVOKE_DELAY_MS)
+  } catch (error) {
+    if (blobDownload) blobDownload.revoke()
+    const detail = error instanceof Error ? error.message : String(error)
+    console.warn('[RedCopy] Blob 媒体下载失败，回退直链下载', {
+      url: normalizedUrl,
+      mediaType,
       detail,
       error,
     })
@@ -210,7 +316,11 @@ export async function downloadTextFile(
   mime = 'text/markdown',
 ): Promise<void> {
   const url = `data:${mime};charset=utf-8,${encodeURIComponent(content)}`
-  await downloadByUrl(url, `薯薯小抄/${sanitizeFilename(filename)}`)
+  const defaultExtension = mime === 'text/markdown' ? '.md' : '.txt'
+  await downloadByUrl(
+    url,
+    `薯薯小抄/${sanitizeFilenameWithExtension(filename, defaultExtension)}`,
+  )
 }
 
 /** 下载单张笔记图片 */
@@ -221,6 +331,18 @@ export async function downloadNoteImage(
 ): Promise<void> {
   await downloadImageLikeUrl(url, (mimeType) =>
     buildImageFilename(context, index, url, mimeType),
+  )
+}
+
+/** 下载单个详情页媒体：图片、视频或 live 直链 */
+export async function downloadNoteMedia(
+  url: string,
+  index: number,
+  mediaType: DownloadNoteMediaType,
+  context: ImageDownloadContext = {},
+): Promise<void> {
+  await downloadMediaLikeUrl(url, mediaType, (mimeType) =>
+    buildMediaFilename(context, index, url, mediaType, mimeType),
   )
 }
 

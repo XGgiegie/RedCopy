@@ -42,6 +42,7 @@ export default defineManifest({
     'unlimitedStorage',
     'tabs',
     'webNavigation',
+    'webRequest',
   ],
   host_permissions: [
     '*://*.xiaohongshu.com/*',
