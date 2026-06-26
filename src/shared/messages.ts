@@ -12,6 +12,7 @@ export const INJECT_DETAIL_EXPORT_BUTTON_MESSAGE =
 export const STORAGE_GET_MESSAGE = 'redcopy:storage-get' as const
 export const STORAGE_SET_MESSAGE = 'redcopy:storage-set' as const
 export const STORAGE_REMOVE_MESSAGE = 'redcopy:storage-remove' as const
+export const IMAGE_TO_DATA_URL_MESSAGE = 'redcopy:image-to-data-url' as const
 
 export interface ExtractNoteRequest {
   type: typeof EXTRACT_NOTE_MESSAGE
@@ -123,5 +124,17 @@ export interface StorageRemoveRequest {
 
 export interface StorageRemoveResponse {
   ok: boolean
+  error?: string
+}
+
+export interface ImageToDataUrlRequest {
+  type: typeof IMAGE_TO_DATA_URL_MESSAGE
+  url: string
+}
+
+export interface ImageToDataUrlResponse {
+  ok: boolean
+  dataUrl?: string
+  mimeType?: string
   error?: string
 }

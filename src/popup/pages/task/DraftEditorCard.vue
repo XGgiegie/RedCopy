@@ -26,6 +26,7 @@ defineProps<{
   isProPlan: boolean
   isGenerateReady: boolean
   imageHistory: GeneratedImageRecord[]
+  publishImageIds: string[]
   isOpeningPublish: boolean
 }>()
 
@@ -35,6 +36,12 @@ const emit = defineEmits<{
   edit: []
   generated: [record: GeneratedImageRecord]
   deleteImage: [recordId: string]
+  setPublishImageSelected: [recordId: string, selected: boolean]
+  setPublishCover: [recordId: string]
+  movePublishImage: [recordId: string, direction: -1 | 1]
+  setPublishPosition: [recordId: string, targetIndex: number]
+  selectAllPublishImages: []
+  clearPublishImages: []
   openPublishPage: []
 }>()
 
@@ -166,7 +173,14 @@ function handleTitleUpdate(value: string) {
 
       <DraftImageHistory
         :records="imageHistory"
+        :publish-image-ids="publishImageIds"
         @delete-image="(id) => $emit('deleteImage', id)"
+        @set-publish-image-selected="(id, selected) => $emit('setPublishImageSelected', id, selected)"
+        @set-publish-cover="(id) => $emit('setPublishCover', id)"
+        @move-publish-image="(id, direction) => $emit('movePublishImage', id, direction)"
+        @set-publish-position="(id, index) => $emit('setPublishPosition', id, index)"
+        @select-all-publish-images="$emit('selectAllPublishImages')"
+        @clear-publish-images="$emit('clearPublishImages')"
       />
     </div>
   </div>

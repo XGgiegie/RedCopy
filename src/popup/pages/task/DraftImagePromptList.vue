@@ -343,7 +343,7 @@ async function generateOneImage(item: DraftImagePrompt): Promise<boolean> {
 
   taskOps.startImage(taskId, item.id)
   try {
-    const url = await generateDraftImage({
+    const generatedUrl = await generateDraftImage({
       prompt: item.prompt,
       referenceImages: references,
       size: getSize(item.id),
@@ -359,6 +359,7 @@ async function generateOneImage(item: DraftImagePrompt): Promise<boolean> {
         background: getProGptBackground(item.id),
       },
     })
+    const url = await cacheGeneratedImageForUpload(generatedUrl)
 
     const record: GeneratedImageRecord = {
       id: createImageRecordId(),
@@ -368,6 +369,7 @@ async function generateOneImage(item: DraftImagePrompt): Promise<boolean> {
       size: props.isProPlan ? `${proModel} · ${meta.size}` : meta.size,
       aspectRatio: meta.aspectRatio,
       fromReference: references.length > 0,
+      source: 'generated',
       url,
       createdAt: Date.now(),
     }
@@ -531,6 +533,23 @@ const promptCount = computed(() => imagePrompts.value.length)
 const generateAllCount = computed(
   () => imagePrompts.value.filter((item) => item.prompt.trim()).length,
 )
+
+async function cacheGeneratedImageForUpload(url: string): Promise<string> {
+  if (url.startsWith('data:')) return url
+
+  const response = await fetch(url, {
+    cache: 'no-store',
+    credentials: 'include',
+  })
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+
+  const blob = await response.blob()
+  if (blob.size === 0) throw new Error('图片内容为空')
+  const file = new File([blob], `generated${guessImageExtension(url, blob.type)}`, {
+    type: blob.type || 'image/jpeg',
+  })
+  return compressImageFileForStorage(file, { maxEdge: 1920, quality: 0.9 })
+}
 </script>
 
 <template>

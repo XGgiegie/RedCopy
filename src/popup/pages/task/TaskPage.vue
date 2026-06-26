@@ -1,7 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { NButton, NPopconfirm, useMessage } from 'naive-ui'
+import {
+  NButton,
+  NCheckbox,
+  NImage,
+  NModal,
+  NPopconfirm,
+  NText,
+  useMessage,
+} from 'naive-ui'
 import { useTaskOperationsStore } from '../../stores/task-operations'
 import {
   type DoubaoModel,
@@ -30,6 +38,14 @@ import {
   formatImagesAsMarkdown,
   getNoteBodyText,
 } from '../../../shared/note-media'
+import {
+  IMAGE_TO_DATA_URL_MESSAGE,
+  type ImageToDataUrlResponse,
+} from '../../../shared/messages'
+import type {
+  XhsPublishContentInput,
+  XhsPublishImageInput,
+} from '../../../shared/publish-xhs'
 import { type Task, deleteTask, getTask, updateTask } from '../../../shared/task-db'
 import type { ContentView, ContentViewOption } from '../../types/content-view'
 import { analyzeNoteText } from '../../services/analyze-note'
@@ -64,6 +80,9 @@ const showGenerateDialog = ref(false)
 const isDownloadingAllImages = ref(false)
 const downloadingImageIndex = ref<number | null>(null)
 const isOpeningPublish = ref(false)
+const publishImageIds = ref<string[]>([])
+const showPublishOrderDialog = ref(false)
+const publishDialogImageIds = ref<string[]>([])
 
 // ── AI 设置（任务页内联，仅本页消费） ────────────────────────
 
@@ -101,6 +120,17 @@ const noteType = computed(() => task.value?.noteType ?? 'normal')
 const analysis = computed(() => task.value?.analysis ?? null)
 const images = computed(() => task.value?.note.images ?? [])
 const imageHistory = computed(() => task.value?.imageHistory ?? [])
+const publishDialogImages = computed(() =>
+  publishDialogImageIds.value
+    .map((id) => imageHistory.value.find((record) => record.id === id))
+    .filter((record): record is GeneratedImageRecord => Boolean(record)),
+)
+const publishDialogRecords = computed(() => [
+  ...publishDialogImages.value,
+  ...imageHistory.value.filter(
+    (record) => !publishDialogImageIds.value.includes(record.id),
+  ),
+])
 
 const hasNote = computed(() => !!note.value)
 const hasAnalysis = computed(() => !!analysis.value)
@@ -146,6 +176,176 @@ function clearImageSelection() {
   selectedIndices.value = []
 }
 
+function setPublishImageSelected(recordId: string, selected: boolean) {
+  if (selected) {
+    if (!publishImageIds.value.includes(recordId)) {
+      publishImageIds.value = [...publishImageIds.value, recordId]
+    }
+    return
+  }
+  publishImageIds.value = publishImageIds.value.filter((id) => id !== recordId)
+}
+
+function setPublishCover(recordId: string) {
+  publishImageIds.value = [
+    recordId,
+    ...publishImageIds.value.filter((id) => id !== recordId),
+  ]
+}
+
+function movePublishImage(recordId: string, direction: -1 | 1) {
+  const currentIndex = publishImageIds.value.indexOf(recordId)
+  if (currentIndex < 0) return
+  const nextIndex = currentIndex + direction
+  if (nextIndex < 0 || nextIndex >= publishImageIds.value.length) return
+
+  const next = [...publishImageIds.value]
+  ;[next[currentIndex], next[nextIndex]] = [next[nextIndex], next[currentIndex]]
+  publishImageIds.value = next
+}
+
+function setPublishPosition(recordId: string, targetIndex: number) {
+  const currentIndex = publishImageIds.value.indexOf(recordId)
+  if (currentIndex < 0) return
+
+  const boundedIndex = Math.min(
+    Math.max(targetIndex, 0),
+    publishImageIds.value.length - 1,
+  )
+  const next = [...publishImageIds.value]
+  const [item] = next.splice(currentIndex, 1)
+  next.splice(boundedIndex, 0, item)
+  publishImageIds.value = next
+}
+
+function selectAllPublishImages() {
+  publishImageIds.value = imageHistory.value.map((record) => record.id)
+}
+
+function clearPublishImages() {
+  publishImageIds.value = []
+}
+
+function isDialogPublishSelected(recordId: string): boolean {
+  return publishDialogImageIds.value.includes(recordId)
+}
+
+function dialogPublishIndex(recordId: string): number {
+  return publishDialogImageIds.value.indexOf(recordId)
+}
+
+function dialogPublishRoleLabel(recordId: string): string {
+  const index = dialogPublishIndex(recordId)
+  if (index < 0) return '未选'
+  return index === 0 ? '封面' : `页图${index}`
+}
+
+function setDialogPublishImageSelected(recordId: string, selected: boolean) {
+  if (selected) {
+    if (!publishDialogImageIds.value.includes(recordId)) {
+      publishDialogImageIds.value = [...publishDialogImageIds.value, recordId]
+    }
+    return
+  }
+  publishDialogImageIds.value = publishDialogImageIds.value.filter((id) => id !== recordId)
+}
+
+function setDialogPublishCover(recordId: string) {
+  publishDialogImageIds.value = [
+    recordId,
+    ...publishDialogImageIds.value.filter((id) => id !== recordId),
+  ]
+}
+
+function moveDialogPublishImage(recordId: string, direction: -1 | 1) {
+  const currentIndex = dialogPublishIndex(recordId)
+  if (currentIndex < 0) return
+  const nextIndex = currentIndex + direction
+  if (nextIndex < 0 || nextIndex >= publishDialogImageIds.value.length) return
+
+  const next = [...publishDialogImageIds.value]
+  ;[next[currentIndex], next[nextIndex]] = [next[nextIndex], next[currentIndex]]
+  publishDialogImageIds.value = next
+}
+
+function selectAllDialogPublishImages() {
+  publishDialogImageIds.value = imageHistory.value.map((record) => record.id)
+}
+
+function clearDialogPublishImages() {
+  publishDialogImageIds.value = []
+}
+
+function openPublishOrderDialog() {
+  if (imageHistory.value.length === 0) {
+    message.warning('请先生成或上传至少一张配图')
+    return
+  }
+
+  const recordIds = new Set(imageHistory.value.map((record) => record.id))
+  const currentIds = publishImageIds.value.filter((id) => recordIds.has(id))
+  publishDialogImageIds.value =
+    currentIds.length > 0 ? currentIds : imageHistory.value.map((record) => record.id)
+  showPublishOrderDialog.value = true
+}
+
+function isLocalPublishImage(url: string): boolean {
+  return url.trim().startsWith('data:image/')
+}
+
+function imageUrlToDataUrl(url: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage(
+      { type: IMAGE_TO_DATA_URL_MESSAGE, url },
+      (response?: ImageToDataUrlResponse) => {
+        const err = chrome.runtime.lastError?.message
+        if (err) {
+          reject(new Error(err))
+          return
+        }
+        if (!response?.ok || !response.dataUrl) {
+          reject(new Error(response?.error ?? '图片转 Base64 失败'))
+          return
+        }
+        resolve(response.dataUrl)
+      },
+    )
+  })
+}
+
+async function ensurePublishImagesAreLocalBase64(
+  records: GeneratedImageRecord[],
+): Promise<GeneratedImageRecord[]> {
+  const current = task.value
+  if (!current) return records
+
+  const convertedById = new Map<string, GeneratedImageRecord>()
+  for (const record of records) {
+    if (isLocalPublishImage(record.url)) {
+      convertedById.set(record.id, record)
+      continue
+    }
+
+    message.info(`正在转存「${record.label || '配图'}」为本地图片`)
+    const dataUrl = await imageUrlToDataUrl(record.url)
+    convertedById.set(record.id, {
+      ...record,
+      source: record.source ?? 'generated',
+      url: dataUrl,
+    })
+  }
+
+  if (convertedById.size === 0) return records
+
+  const nextHistory = current.imageHistory.map((record) =>
+    convertedById.get(record.id) ?? record,
+  )
+  const updated = await updateTask(current.id, { imageHistory: nextHistory })
+  if (taskId.value === current.id && updated) task.value = updated
+
+  return records.map((record) => convertedById.get(record.id) ?? record)
+}
+
 // ── 视图切换（笔记 / 分析 / 类似笔记） ───────────────────────
 
 const contentViewOptions = computed<ContentViewOption[]>(() => {
@@ -182,6 +382,7 @@ async function loadTask(id: string) {
     generateTopic.value = found.generateTopic ?? ''
     contentView.value = found.draft ? 'draft' : found.analysis ? 'analysis' : 'note'
     selectedIndices.value = (found.note.images ?? []).map((_, index) => index)
+    publishImageIds.value = []
 
     // 修复历史未解析成功的 JSON 草稿，或迁移旧版 imageTips → imagePrompts
     if (
@@ -204,6 +405,11 @@ async function loadTask(id: string) {
 }
 
 watch(taskId, (id) => void loadTask(id), { immediate: true })
+
+watch(imageHistory, (records) => {
+  const recordIds = new Set(records.map((record) => record.id))
+  publishImageIds.value = publishImageIds.value.filter((id) => recordIds.has(id))
+})
 
 // ── 分析（捕获 id，避免切换任务时结果串台） ──────────────────
 
@@ -369,6 +575,7 @@ async function handleDeleteImage(recordId: string) {
   const nextHistory = (current.imageHistory ?? []).filter(
     (item) => item.id !== recordId,
   )
+  publishImageIds.value = publishImageIds.value.filter((id) => id !== recordId)
   const updated = await updateTask(id, { imageHistory: nextHistory })
   if (taskId.value === id && updated) task.value = updated
   console.info('[RedCopy] 已从配图历史删除', { id, recordId })
@@ -377,10 +584,40 @@ async function handleDeleteImage(recordId: string) {
 // ── 打开小红书发布页 ─────────────────────────────────────────
 
 async function handleOpenPublishPage() {
+  openPublishOrderDialog()
+}
+
+async function handleConfirmPublishOrder() {
+  if (publishDialogImages.value.length === 0) {
+    message.warning('请至少选择一张图片')
+    return
+  }
+
   isOpeningPublish.value = true
   try {
-    await openPublishPage()
-    message.success('已打开小红书发布页')
+    const localImages = await ensurePublishImagesAreLocalBase64(publishDialogImages.value)
+    publishImageIds.value = localImages.map((record) => record.id)
+    const publishImages: XhsPublishImageInput[] = localImages.map(
+      (record, index) => ({
+        id: record.id,
+        label: index === 0
+          ? `封面-${record.label || '配图'}`
+          : `页图${index}-${record.label || '配图'}`,
+        url: record.url,
+      }),
+    )
+    const publishContent: XhsPublishContentInput = {
+      title: draftModel.value?.title ?? '',
+      body: draftModel.value?.body ?? '',
+      tags: draftModel.value?.tags ?? [],
+    }
+    const result = await openPublishPage(publishImages, publishContent)
+    showPublishOrderDialog.value = false
+    message.success(
+      result.upload
+        ? `已打开发布页并上传 ${result.upload.uploaded} 张图片，标题正文标签已回填`
+        : '已打开小红书发布页',
+    )
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error)
     console.error('[RedCopy] 打开发布页失败', detail, error)
@@ -633,12 +870,19 @@ onUnmounted(() => {
         :is-pro-plan="isProPlanRef"
         :is-generate-ready="isGenerateReady"
         :image-history="imageHistory"
+        :publish-image-ids="publishImageIds"
         :is-opening-publish="isOpeningPublish"
         @copy-text="handleCopyDraftText"
         @copy-markdown="handleCopyDraftMarkdown"
         @edit="scheduleDraftPersist"
         @generated="handleImageGenerated"
         @delete-image="handleDeleteImage"
+        @set-publish-image-selected="setPublishImageSelected"
+        @set-publish-cover="setPublishCover"
+        @move-publish-image="movePublishImage"
+        @set-publish-position="setPublishPosition"
+        @select-all-publish-images="selectAllPublishImages"
+        @clear-publish-images="clearPublishImages"
         @open-publish-page="handleOpenPublishPage"
       />
     </template>
@@ -650,6 +894,97 @@ onUnmounted(() => {
       :has-draft="hasDraft"
       @confirm="handleGenerate"
     />
+
+    <NModal
+      v-model:show="showPublishOrderDialog"
+      preset="card"
+      title="发布图片顺序"
+      class="publish-order-modal"
+      style="width: min(420px, calc(100vw - 28px))"
+      :bordered="false"
+      size="small"
+    >
+      <div class="publish-order-dialog">
+        <NText depth="3" class="publish-order-hint">
+          确认后先进入小红书图文发布页，再按此顺序触发上传；第 1 张为封面，后续依次为页图。
+        </NText>
+
+        <div class="publish-order-toolbar">
+          <NText depth="3" class="publish-order-count">
+            已选 {{ publishDialogImages.length }} / {{ imageHistory.length }} 张
+          </NText>
+          <div class="publish-order-toolbar-actions">
+            <NButton size="tiny" secondary @click="selectAllDialogPublishImages">
+              全选
+            </NButton>
+            <NButton size="tiny" secondary @click="clearDialogPublishImages">
+              清空
+            </NButton>
+          </div>
+        </div>
+
+        <div class="publish-order-list">
+          <div
+            v-for="record in publishDialogRecords"
+            :key="record.id"
+            class="publish-order-item"
+            :class="{ 'publish-order-item--selected': isDialogPublishSelected(record.id) }"
+          >
+            <NImage
+              :src="record.url"
+              object-fit="contain"
+              class="publish-order-image"
+              :img-props="{ alt: '发布图片' }"
+            />
+            <div class="publish-order-info">
+              <div class="publish-order-main">
+                <NCheckbox
+                  :checked="isDialogPublishSelected(record.id)"
+                  @update:checked="(value) => setDialogPublishImageSelected(record.id, Boolean(value))"
+                >
+                  {{ dialogPublishRoleLabel(record.id) }}
+                </NCheckbox>
+                <NText class="publish-order-label">
+                  {{ record.label || '配图' }}
+                </NText>
+              </div>
+              <NText depth="3" class="publish-order-meta">
+                {{ record.aspectRatio ?? record.size }}
+              </NText>
+              <div
+                v-if="isDialogPublishSelected(record.id)"
+                class="publish-order-actions"
+              >
+                <NButton size="tiny" secondary @click="setDialogPublishCover(record.id)">
+                  设为封面
+                </NButton>
+                <NButton size="tiny" quaternary @click="moveDialogPublishImage(record.id, -1)">
+                  上移
+                </NButton>
+                <NButton size="tiny" quaternary @click="moveDialogPublishImage(record.id, 1)">
+                  下移
+                </NButton>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="publish-order-footer">
+          <NButton size="small" secondary @click="showPublishOrderDialog = false">
+            取消
+          </NButton>
+          <NButton
+            size="small"
+            type="primary"
+            :loading="isOpeningPublish"
+            :disabled="publishDialogImages.length === 0"
+            @click="handleConfirmPublishOrder"
+          >
+            确定并上传
+          </NButton>
+        </div>
+      </div>
+    </NModal>
   </div>
 </template>
 
@@ -711,5 +1046,117 @@ onUnmounted(() => {
   width: 15px;
   height: 15px;
   display: block;
+}
+
+.publish-order-modal {
+  width: min(420px, calc(100vw - 28px));
+}
+
+.publish-order-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.publish-order-hint {
+  display: block;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.publish-order-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.publish-order-count {
+  font-size: 12px;
+}
+
+.publish-order-toolbar-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.publish-order-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: min(54vh, 460px);
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.publish-order-item {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 9px;
+  padding: 8px;
+  border: 1px solid #eef0f4;
+  border-radius: 8px;
+  background: #f7f8fa;
+}
+
+.publish-order-item--selected {
+  border-color: rgba(255, 36, 66, 0.42);
+  background: #fff7f7;
+}
+
+.publish-order-image {
+  width: 76px;
+  height: 76px;
+  border: 1px solid #e5e6eb;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.publish-order-image :deep(img) {
+  width: 76px;
+  height: 76px;
+  object-fit: contain;
+  display: block;
+}
+
+.publish-order-info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.publish-order-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.publish-order-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.publish-order-meta {
+  font-size: 11px;
+}
+
+.publish-order-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.publish-order-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 2px;
 }
 </style>

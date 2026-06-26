@@ -1,6 +1,14 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { NButton, NImage, NSpace, NText, useMessage } from 'naive-ui'
+import { computed, ref } from 'vue'
+import {
+  NButton,
+  NCheckbox,
+  NImage,
+  NSelect,
+  NSpace,
+  NText,
+  useMessage,
+} from 'naive-ui'
 import type { GeneratedImageRecord } from '../../../shared/ai-types'
 import {
   copyTextToClipboard,
@@ -11,14 +19,22 @@ import { downloadImageByUrl, guessImageExtension } from '../../../shared/note-me
 
 const props = defineProps<{
   records: GeneratedImageRecord[]
+  publishImageIds: string[]
 }>()
 
 const emit = defineEmits<{
   deleteImage: [recordId: string]
+  setPublishImageSelected: [recordId: string, selected: boolean]
+  setPublishCover: [recordId: string]
+  movePublishImage: [recordId: string, direction: -1 | 1]
+  setPublishPosition: [recordId: string, targetIndex: number]
+  selectAllPublishImages: []
+  clearPublishImages: []
 }>()
 
 const message = useMessage()
 const isDownloadingAll = ref(false)
+const selectedPublishCount = computed(() => props.publishImageIds.length)
 
 function formatTime(timestamp: number): string {
   return new Date(timestamp).toLocaleString('zh-CN', {
@@ -32,6 +48,31 @@ function formatTime(timestamp: number): string {
 function sourceLabel(record: GeneratedImageRecord): string {
   if (record.source === 'upload') return '上传'
   return record.fromReference ? '图生图' : '文生图'
+}
+
+function publishIndex(recordId: string): number {
+  return props.publishImageIds.indexOf(recordId)
+}
+
+function isPublishSelected(recordId: string): boolean {
+  return publishIndex(recordId) >= 0
+}
+
+function publishRoleLabel(recordId: string): string {
+  const index = publishIndex(recordId)
+  if (index < 0) return '未发布'
+  return index === 0 ? '封面' : `页图${index}`
+}
+
+function publishPositionOptions() {
+  return props.publishImageIds.map((_, index) => ({
+    label: index === 0 ? '封面' : `页图${index}`,
+    value: index,
+  }))
+}
+
+function updatePublishSelected(recordId: string, value: boolean) {
+  emit('setPublishImageSelected', recordId, value)
 }
 
 async function copyAllMarkdown() {
@@ -100,8 +141,16 @@ async function downloadAll() {
 <template>
   <div v-if="records.length > 0" class="image-history">
     <div class="image-history-header">
-      <NText depth="3" class="content-label">配图历史 · {{ records.length }} 张</NText>
+      <NText depth="3" class="content-label">
+        配图历史 · {{ records.length }} 张 · 已选 {{ selectedPublishCount }} 张
+      </NText>
       <NSpace :size="6">
+        <NButton size="tiny" secondary @click="emit('selectAllPublishImages')">
+          全选发布
+        </NButton>
+        <NButton size="tiny" secondary @click="emit('clearPublishImages')">
+          清空发布
+        </NButton>
         <NButton size="tiny" secondary @click="copyAllMarkdown">
           一键复制 Markdown
         </NButton>
@@ -116,8 +165,17 @@ async function downloadAll() {
       </NSpace>
     </div>
 
+    <NText depth="3" class="publish-hint">
+      勾选要发布的生成图，第一张为封面，其后依次为页图1、页图2；可直接改位置或用上下按钮调整。
+    </NText>
+
     <div class="history-grid">
-      <div v-for="record in records" :key="record.id" class="history-card">
+      <div
+        v-for="record in records"
+        :key="record.id"
+        class="history-card"
+        :class="{ 'history-card--selected': isPublishSelected(record.id) }"
+      >
         <NImage
           :src="record.url"
           object-fit="contain"
@@ -130,6 +188,32 @@ async function downloadAll() {
             {{ sourceLabel(record) }} ·
             {{ record.aspectRatio ?? record.size }} · {{ formatTime(record.createdAt) }}
           </NText>
+        </div>
+        <div class="publish-controls">
+          <NCheckbox
+            :checked="isPublishSelected(record.id)"
+            @update:checked="(value) => updatePublishSelected(record.id, Boolean(value))"
+          >
+            {{ publishRoleLabel(record.id) }}
+          </NCheckbox>
+          <div v-if="isPublishSelected(record.id)" class="publish-position-row">
+            <NSelect
+              :value="publishIndex(record.id)"
+              :options="publishPositionOptions()"
+              size="tiny"
+              class="publish-position-select"
+              @update:value="(value) => emit('setPublishPosition', record.id, Number(value))"
+            />
+            <NButton size="tiny" quaternary @click="emit('movePublishImage', record.id, -1)">
+              ↑
+            </NButton>
+            <NButton size="tiny" quaternary @click="emit('movePublishImage', record.id, 1)">
+              ↓
+            </NButton>
+            <NButton size="tiny" quaternary @click="emit('setPublishCover', record.id)">
+              封面
+            </NButton>
+          </div>
         </div>
         <NSpace :size="4" class="history-actions">
           <NButton size="tiny" quaternary @click="copyOneMarkdown(record)">
@@ -171,6 +255,17 @@ async function downloadAll() {
   margin-bottom: 0;
 }
 
+.image-history-header :deep(.n-space) {
+  justify-content: flex-end;
+}
+
+.publish-hint {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .history-grid {
   display: flex;
   flex-direction: column;
@@ -179,7 +274,7 @@ async function downloadAll() {
 
 .history-card {
   display: grid;
-  grid-template-columns: 96px minmax(0, 1fr) auto;
+  grid-template-columns: 96px minmax(0, 1fr);
   align-items: center;
   gap: 10px;
   padding: 8px;
@@ -188,7 +283,13 @@ async function downloadAll() {
   border-radius: 8px;
 }
 
+.history-card--selected {
+  border-color: rgba(255, 36, 66, 0.42);
+  background: #fff7f7;
+}
+
 .history-image {
+  grid-row: span 3;
   width: 96px;
   height: 96px;
   border-radius: 6px;
@@ -225,9 +326,29 @@ async function downloadAll() {
   font-size: 11px;
 }
 
+.publish-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.publish-position-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.publish-position-select {
+  width: 86px;
+}
+
 .history-actions {
   flex-shrink: 0;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 @media (max-width: 360px) {
@@ -242,7 +363,6 @@ async function downloadAll() {
   }
 
   .history-actions {
-    grid-column: 1 / -1;
     justify-content: flex-end;
   }
 }
