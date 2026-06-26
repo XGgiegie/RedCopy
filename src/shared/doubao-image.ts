@@ -13,8 +13,31 @@ export interface ImageGenerationOptions {
 }
 
 interface ImageGenerationResponse {
-  data?: Array<{ url?: string }>
+  data?: Array<{ url?: string; b64_json?: string }>
   error?: { message?: string }
+}
+
+function guessBase64MimeType(value: string): string {
+  const base64 = value.trim().slice(0, 24)
+  if (base64.startsWith('/9j/')) return 'image/jpeg'
+  if (base64.startsWith('iVBOR')) return 'image/png'
+  if (base64.startsWith('UklGR')) return 'image/webp'
+  if (base64.startsWith('R0lGOD')) return 'image/gif'
+  return 'image/jpeg'
+}
+
+function normalizeImageOutput(item?: { url?: string; b64_json?: string }): string {
+  const base64 = item?.b64_json?.trim()
+  if (base64) {
+    return base64.startsWith('data:')
+      ? base64
+      : `data:${guessBase64MimeType(base64)};base64,${base64}`
+  }
+
+  const url = item?.url?.trim()
+  if (url) return url
+
+  throw new Error('配图生成未返回图片')
 }
 
 /** 调用火山方舟 Seedream 文生图 / 图生图 */
@@ -36,7 +59,7 @@ export async function requestDoubaoImageGeneration(
     model: DOUBAO_IMAGE_MODEL,
     prompt,
     sequential_image_generation: 'disabled',
-    response_format: 'url',
+    response_format: 'b64_json',
     size: options.size?.trim() || DEFAULT_IMAGE_SIZE,
     stream: false,
     watermark: false,
@@ -73,11 +96,11 @@ export async function requestDoubaoImageGeneration(
     throw new Error(`配图生成失败：${detail}`)
   }
 
-  const imageUrl = data.data?.[0]?.url?.trim()
-  if (!imageUrl) {
-    throw new Error('配图生成未返回图片 URL')
-  }
+  const imageUrl = normalizeImageOutput(data.data?.[0])
 
-  console.info('[RedCopy] 配图生成完成', { imageUrl: imageUrl.slice(0, 80) })
+  console.info('[RedCopy] 配图生成完成', {
+    format: imageUrl.startsWith('data:') ? 'base64' : 'url',
+    imageUrl: imageUrl.slice(0, 80),
+  })
   return imageUrl
 }

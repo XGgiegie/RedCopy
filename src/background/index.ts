@@ -6,6 +6,7 @@ import {
   DOWNLOAD_NOTE_MEDIA_MESSAGE,
   EXTRACT_NOTE_MESSAGE,
   EXPORT_CURRENT_NOTE_MARKDOWN_MESSAGE,
+  IMAGE_TO_DATA_URL_MESSAGE,
   INJECT_DETAIL_EXPORT_BUTTON_MESSAGE,
   STORAGE_GET_MESSAGE,
   STORAGE_REMOVE_MESSAGE,
@@ -16,6 +17,7 @@ import {
   type DownloadNoteMediaResponse,
   type ExtractNoteResponse,
   type ExportCurrentNoteMarkdownResponse,
+  type ImageToDataUrlResponse,
   type InjectDetailExportButtonResponse,
   type StorageGetResponse,
   type StorageRemoveResponse,
@@ -790,6 +792,31 @@ function buildSingleNoteMarkdownFilename(extract: NoteExtractResult): string {
   return `小红书笔记-${name}.md`
 }
 
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result))
+    reader.onerror = () => reject(reader.error ?? new Error('图片读取失败'))
+    reader.readAsDataURL(blob)
+  })
+}
+
+async function imageUrlToDataUrl(url: string): Promise<{ dataUrl: string; mimeType: string }> {
+  const response = await fetch(url, {
+    cache: 'no-store',
+    credentials: 'include',
+  })
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+
+  const blob = await response.blob()
+  if (blob.size === 0) throw new Error('图片内容为空')
+
+  return {
+    dataUrl: await blobToDataUrl(blob),
+    mimeType: blob.type || response.headers.get('content-type') || 'image/jpeg',
+  }
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // 存储代理：供 dev 模式下 chrome.storage 不可用的扩展页使用
   if (message?.type === STORAGE_GET_MESSAGE) {
@@ -834,6 +861,36 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         console.error('[RedCopy] 代理删除存储失败', msg, error)
         sendResponse({ ok: false, error: msg } satisfies StorageRemoveResponse)
       })
+    return true
+  }
+
+  if (message?.type === IMAGE_TO_DATA_URL_MESSAGE) {
+    const url = typeof message.url === 'string' ? message.url.trim() : ''
+    if (!url) {
+      sendResponse({
+        ok: false,
+        error: '缺少图片 URL',
+      } satisfies ImageToDataUrlResponse)
+      return false
+    }
+
+    imageUrlToDataUrl(url)
+      .then((result) => {
+        sendResponse({
+          ok: true,
+          dataUrl: result.dataUrl,
+          mimeType: result.mimeType,
+        } satisfies ImageToDataUrlResponse)
+      })
+      .catch((error: unknown) => {
+        const msg = error instanceof Error ? error.message : String(error)
+        console.error('[RedCopy] 图片转 Base64 失败', { url: url.slice(0, 120), msg }, error)
+        sendResponse({
+          ok: false,
+          error: msg,
+        } satisfies ImageToDataUrlResponse)
+      })
+
     return true
   }
 
