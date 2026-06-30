@@ -234,17 +234,23 @@ export function formatImageHistoryAsMarkdown(
     .join('\n\n')
 }
 
-/** 将单条任务（笔记 + 分析 + 类似笔记 + 配图历史）格式化为 Markdown */
+/** 将单条任务（笔记 + 创作草稿 + 配图历史）格式化为 Markdown */
 export function formatTaskAsMarkdown(task: Task): string {
-  const blocks: string[] = [
-    formatNoteAsMarkdown(task.note, { url: task.url, noteId: task.noteId }),
-  ]
+  const isDirectCreation = task.creationMode === 'direct'
+  const blocks: string[] = isDirectCreation
+    ? []
+    : [formatNoteAsMarkdown(task.note, { url: task.url, noteId: task.noteId })]
 
-  if (task.analysis) {
-    blocks.push('', formatAnalysisAsMarkdown(task.analysis))
-  }
   if (task.draft) {
-    blocks.push('', '## 类似笔记', '', formatDraftAsMarkdown(task.draft))
+    blocks.push(
+      '',
+      isDirectCreation ? '## 创作草稿' : '## 仿照创作',
+      '',
+      formatDraftAsMarkdown(task.draft),
+    )
+  } else if (isDirectCreation && task.generateTopic) {
+    blocks.push(`# ${task.note.title?.trim() || '直接创作'}`, '')
+    blocks.push(`创作主题：${task.generateTopic}`)
   }
   if (task.imageHistory?.length) {
     blocks.push('', '## 配图历史', '', formatImageHistoryAsMarkdown(task.imageHistory))
@@ -256,7 +262,7 @@ export function formatTaskAsMarkdown(task: Task): string {
 /** 将全部任务汇总为单个 Markdown 文档（一键导出） */
 export function formatAllTasksAsMarkdown(tasks: Task[]): string {
   const header = [
-    '# 薯薯小抄 · 全部笔记导出',
+    '# 薯薯小抄 · 全部创作任务导出',
     '',
     `> 共 ${tasks.length} 条 · 导出时间 ${new Date().toLocaleString('zh-CN')}`,
     '',
@@ -267,10 +273,16 @@ export function formatAllTasksAsMarkdown(tasks: Task[]): string {
   }
 
   const body = tasks.map(
-    (task, index) =>
-      `---\n\n## ${index + 1}. ${task.note.title?.trim() || '（无标题）'}\n\n${formatTaskAsMarkdown(
+    (task, index) => {
+      const title =
+        task.draft?.title?.trim() ||
+        task.note.title?.trim() ||
+        task.generateTopic?.trim() ||
+        '（无标题）'
+      return `---\n\n## ${index + 1}. ${title}\n\n${formatTaskAsMarkdown(
         task,
-      )}`,
+      )}`
+    },
   )
 
   return [...header, ...body, ''].join('\n\n').trim() + '\n'

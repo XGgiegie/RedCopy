@@ -15,14 +15,14 @@ const pageStatus = usePageStatusStore()
 const xhsLogin = useXhsLoginStore()
 
 const isModuleHome = computed(
-  () => route.name === 'analysis' || route.name === 'growth',
+  () => route.name === 'creation' || route.name === 'growth',
 )
 const showModuleTabs = computed(() => isModuleHome.value)
 const isSettings = computed(() => route.name === 'settings')
 
 const headerTitle = computed(() => {
   if (isSettings.value) return 'API Key 设置'
-  if (route.name === 'task') return '笔记任务'
+  if (route.name === 'task') return '创作任务'
   return ''
 })
 
@@ -31,7 +31,7 @@ function goBack() {
     router.back()
     return
   }
-  void router.push('/analysis')
+  void router.push('/creation')
 }
 
 function openSettings() {

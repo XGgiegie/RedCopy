@@ -4,7 +4,7 @@ import { requestDoubaoGenerate } from '../../shared/doubao-generate'
 import { requestProGenerate } from '../../shared/pro-generate'
 import type { NoteTextInfo } from '../../shared/note-types'
 
-/** 侧栏生成类似笔记草稿：免费版走豆包，Pro 版走 gemini-3.5-flash */
+/** 侧栏生成创作草稿：免费版走豆包，Pro 版走 gemini-3.5-flash */
 export async function generateNoteDraft(payload: {
   noteId: string | null
   url: string

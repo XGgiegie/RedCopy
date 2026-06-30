@@ -1,12 +1,13 @@
 /** 插件品牌与联系方式 */
 export const APP_NAME = '薯薯小抄'
-export const APP_TAGLINE = '小红书笔记提取与 AI 解析小助手'
+export const APP_TAGLINE = '小红书 AI 创作小助手'
 
 /** 侧栏两大独立模块 */
-export const MODULE_ANALYSIS = '笔记分析'
-export const MODULE_GROWTH = '涨粉自动获客'
+export const MODULE_CREATION = '创作'
+export const MODULE_ANALYSIS = MODULE_CREATION
+export const MODULE_GROWTH = '自动垂直养号'
 export const APP_DESCRIPTION =
-  '一键提取小红书图文笔记，复制 Markdown，AI 帮你读懂爆款笔记'
+  '支持直接创作，也可提取小红书笔记分析后再生成创作草稿'
 
 export const CONTACT_QQ = '1653444718'
 export const CONTACT_WECHAT = '13096375299'

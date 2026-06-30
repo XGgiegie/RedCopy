@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 import {
   NButton,
   NForm,
@@ -12,9 +12,10 @@ import {
 } from 'naive-ui'
 import type { AutoCollectConfig, AutoCollectProgress } from '../../../shared/auto-collect'
 import {
-  AutoCollectCancelledError,
-  runAutoCollect,
-} from '../../services/auto-collect-runner'
+  getAutoCollectTaskStatus,
+  startAutoCollectTask,
+  stopAutoCollectTask,
+} from '../../services/background-tasks'
 import InfoTip from '../../components/InfoTip.vue'
 
 const props = defineProps<{
@@ -38,6 +39,7 @@ const scrollRounds = ref(3)
 const isRunning = ref(false)
 const cancelled = ref(false)
 const progress = ref<AutoCollectProgress | null>(null)
+let pollTimer: ReturnType<typeof setInterval> | null = null
 
 function resetForm() {
   keyword.value = ''
@@ -48,6 +50,60 @@ function resetForm() {
   scrollRounds.value = 3
   progress.value = null
   cancelled.value = false
+}
+
+function stopPolling() {
+  if (!pollTimer) return
+  clearInterval(pollTimer)
+  pollTimer = null
+}
+
+function startPolling() {
+  if (pollTimer) return
+  pollTimer = setInterval(() => {
+    void syncBackgroundStatus()
+  }, 1000)
+}
+
+async function syncBackgroundStatus() {
+  try {
+    const response = await getAutoCollectTaskStatus()
+    const status = response.status
+    if (!status) return
+
+    const wasRunning = isRunning.value
+    isRunning.value = status.running
+    cancelled.value = status.cancelled
+    progress.value = status.progress
+
+    if (status.running) {
+      startPolling()
+      return
+    }
+
+    stopPolling()
+
+    if (wasRunning) {
+      if (status.error) {
+        message.error(`自动采集失败：${status.error}`)
+      } else if (status.result) {
+        const savedCount = status.result.extracted
+        if (status.cancelled || status.progress?.phase === 'cancelled') {
+          message.info(
+            savedCount > 0
+              ? `自动采集已取消，已入库 ${savedCount} 篇`
+              : '自动采集已取消',
+          )
+        } else {
+          message.success(`自动采集完成：入库 ${savedCount} 篇`)
+        }
+        if (savedCount > 0) emit('completed')
+      }
+    }
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    console.error('[RedCopy] 同步后台自动采集状态失败', detail, error)
+  }
 }
 
 watch(
@@ -66,14 +122,21 @@ function close() {
 }
 
 function cancelRun() {
-  cancelled.value = true
-  progress.value = {
-    phase: 'cancelled',
-    message: '正在取消…',
-    scanned: progress.value?.scanned ?? 0,
-    extracted: progress.value?.extracted ?? 0,
-    skipped: progress.value?.skipped ?? 0,
-  }
+  void stopAutoCollectTask()
+    .then((response) => {
+      cancelled.value = response.status?.cancelled ?? true
+      progress.value = response.status?.progress ?? {
+        phase: 'cancelled',
+        message: '正在取消…',
+        scanned: progress.value?.scanned ?? 0,
+        extracted: progress.value?.extracted ?? 0,
+        skipped: progress.value?.skipped ?? 0,
+      }
+    })
+    .catch((error) => {
+      const detail = error instanceof Error ? error.message : String(error)
+      message.error(`停止失败：${detail}`)
+    })
 }
 
 async function startRun() {
@@ -102,49 +165,35 @@ async function startRun() {
   }
 
   try {
-    const result = await runAutoCollect(config, {
-      onProgress: (value) => {
-        progress.value = value
-      },
-      isCancelled: () => cancelled.value,
-    })
-
-    const savedCount = result.extracted
-    if (cancelled.value) {
-      message.info(
-        savedCount > 0
-          ? `自动采集已取消，已入库 ${savedCount} 篇`
-          : '自动采集已取消',
-      )
-    } else {
-      message.success(`自动采集完成：入库 ${savedCount} 篇`)
-    }
-    if (savedCount > 0) emit('completed')
+    const response = await startAutoCollectTask(config)
+    isRunning.value = response.status?.running ?? true
+    cancelled.value = response.status?.cancelled ?? false
+    progress.value = response.status?.progress ?? progress.value
+    startPolling()
+    emit('update:show', false)
+    message.success('自动采集已在后台开始，关闭侧栏也会继续运行')
   } catch (error) {
-    if (error instanceof AutoCollectCancelledError) {
-      const savedCount = progress.value?.extracted ?? 0
-      message.info(
-        savedCount > 0
-          ? `自动采集已取消，已入库 ${savedCount} 篇`
-          : '自动采集已取消',
-      )
-      if (savedCount > 0) emit('completed')
-    } else {
-      const detail = error instanceof Error ? error.message : String(error)
-      console.error('[RedCopy] 自动采集失败', detail, error)
-      message.error(`自动采集失败：${detail}`)
-      progress.value = {
-        phase: 'error',
-        message: detail,
-        scanned: progress.value?.scanned ?? 0,
-        extracted: progress.value?.extracted ?? 0,
-        skipped: progress.value?.skipped ?? 0,
-      }
+    const detail = error instanceof Error ? error.message : String(error)
+    console.error('[RedCopy] 启动后台自动采集失败', detail, error)
+    message.error(`自动采集失败：${detail}`)
+    progress.value = {
+      phase: 'error',
+      message: detail,
+      scanned: progress.value?.scanned ?? 0,
+      extracted: progress.value?.extracted ?? 0,
+      skipped: progress.value?.skipped ?? 0,
     }
-  } finally {
     isRunning.value = false
   }
 }
+
+onMounted(() => {
+  void syncBackgroundStatus()
+})
+
+onUnmounted(() => {
+  stopPolling()
+})
 </script>
 
 <template>
@@ -159,7 +208,7 @@ async function startRun() {
     @update:show="emit('update:show', $event)"
   >
     <NText depth="3" class="dialog-hint">
-      将在当前小红书标签页搜索关键词，按点赞/收藏/评论筛选后自动提取入库到历史任务。每篇笔记打开后停留约 8 秒再关闭。采集过程中请勿切换标签页。
+      将在当前小红书标签页搜索关键词，按点赞/收藏/评论筛选后自动提取入库到历史任务。任务会交给后台继续运行，关闭侧栏也不会停止；采集过程中请勿切换小红书标签页。
     </NText>
 
     <NForm label-placement="top" :disabled="isRunning" size="small">

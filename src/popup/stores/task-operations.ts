@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
+import type { AnalyzeGenerateTaskStatus } from '../../shared/messages'
 
 /** 任务后台操作类型 */
 export type TaskOperationType = 'analyzing' | 'generating'
@@ -14,7 +15,7 @@ function imageOpKey(taskId: string, promptId: string): string {
 
 /**
  * 按任务 id 记录进行中的 AI 操作。
- * 状态挂在 Pinia 上，离开任务详情页后仍可见，列表可展示「分析中 / 生成中」。
+ * 状态挂在 Pinia 上，离开任务详情页后仍可见，列表可展示「准备中 / 生成中」。
  */
 export const useTaskOperationsStore = defineStore('taskOperations', () => {
   const analyzingIds = ref<Set<string>>(new Set())
@@ -99,9 +100,44 @@ export const useTaskOperationsStore = defineStore('taskOperations', () => {
     return false
   }
 
+  function syncAnalyzeGenerateStatus(
+    taskId: string,
+    status?: AnalyzeGenerateTaskStatus | null,
+  ) {
+    const nextAnalyzing = cloneSet(analyzingIds.value)
+    const nextGenerating = cloneSet(generatingIds.value)
+    nextAnalyzing.delete(taskId)
+    nextGenerating.delete(taskId)
+
+    if (status?.running && status.progress?.phase === 'analyzing') {
+      nextAnalyzing.add(taskId)
+    } else if (status?.running && status.progress?.phase === 'generating') {
+      nextGenerating.add(taskId)
+    }
+
+    analyzingIds.value = nextAnalyzing
+    generatingIds.value = nextGenerating
+  }
+
+  function syncAnalyzeGenerateStatuses(
+    statuses: Record<string, AnalyzeGenerateTaskStatus>,
+  ) {
+    const nextAnalyzing = new Set<string>()
+    const nextGenerating = new Set<string>()
+
+    for (const [taskId, status] of Object.entries(statuses)) {
+      if (!status.running) continue
+      if (status.progress?.phase === 'analyzing') nextAnalyzing.add(taskId)
+      if (status.progress?.phase === 'generating') nextGenerating.add(taskId)
+    }
+
+    analyzingIds.value = nextAnalyzing
+    generatingIds.value = nextGenerating
+  }
+
   function getStatusLabel(taskId: string): string | null {
-    if (isAnalyzing(taskId)) return 'AI 分析中'
-    if (isGenerating(taskId)) return '生成中'
+    if (isAnalyzing(taskId)) return '分析中'
+    if (isGenerating(taskId)) return '创作中'
     if (isGeneratingImagesForTask(taskId)) return '配图生成中'
     return null
   }
@@ -114,6 +150,8 @@ export const useTaskOperationsStore = defineStore('taskOperations', () => {
     busyTaskIds,
     start,
     stop,
+    syncAnalyzeGenerateStatus,
+    syncAnalyzeGenerateStatuses,
     startImage,
     stopImage,
     isAnalyzing,

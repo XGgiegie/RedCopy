@@ -23,6 +23,9 @@ const MAX_TASKS = 50
 /** 任务来源：手动提取 vs 涨粉获客自动采集 */
 export type TaskSource = 'manual' | 'growth'
 
+/** 创作模式：直接创作 vs 笔记分析后创作 */
+export type CreationMode = 'direct' | 'note_analysis'
+
 /** 单条任务记录 */
 export interface Task {
   id: string
@@ -32,6 +35,8 @@ export interface Task {
   noteType: NoteMediaType
   /** 未标记的历史数据视为 manual */
   source: TaskSource
+  /** 未标记的历史数据视为笔记分析后创作 */
+  creationMode: CreationMode
   extractedAt: number
   analysis: AiAnalysisResult | null
   analyzedAt: number | null
@@ -45,6 +50,8 @@ export interface Task {
 /** 新建任务时由调用方提供的字段 */
 export type NewTaskInput = Pick<Task, 'noteId' | 'url' | 'note' | 'noteType'> & {
   source?: TaskSource
+  creationMode?: CreationMode
+  generateTopic?: string
 }
 
 /** 允许更新的字段 */
@@ -71,6 +78,7 @@ function normalizeTask(task: Task): Task {
   return {
     ...task,
     source: task.source ?? 'manual',
+    creationMode: task.creationMode ?? 'note_analysis',
     imageHistory: Array.isArray(task.imageHistory) ? task.imageHistory : [],
   }
 }
@@ -94,6 +102,7 @@ async function buildTaskFromLegacyCaches(): Promise<Task[]> {
     note: extract.note,
     noteType: extract.noteType ?? 'normal',
     source: 'manual',
+    creationMode: 'note_analysis',
     extractedAt: Date.now(),
     analysis: analysis?.analysis ?? null,
     analyzedAt: analysis?.analyzedAt ?? null,
@@ -151,6 +160,7 @@ export async function createTask(input: NewTaskInput): Promise<Task> {
   const task: Task = {
     ...input,
     source: input.source ?? 'manual',
+    creationMode: input.creationMode ?? 'note_analysis',
     id: createTaskId(),
     extractedAt: Date.now(),
     analysis: null,

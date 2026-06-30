@@ -13,12 +13,16 @@ export const router = createRouter({
   routes: [
     {
       path: '/',
-      redirect: '/analysis',
+      redirect: '/creation',
+    },
+    {
+      path: '/creation',
+      name: 'creation',
+      component: ListPage,
     },
     {
       path: '/analysis',
-      name: 'analysis',
-      component: ListPage,
+      redirect: '/creation',
     },
     {
       path: '/growth',
@@ -38,7 +42,7 @@ export const router = createRouter({
     },
     {
       path: '/:pathMatch(.*)*',
-      redirect: '/analysis',
+      redirect: '/creation',
     },
   ],
 })

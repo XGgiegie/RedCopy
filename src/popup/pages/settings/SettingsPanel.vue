@@ -169,11 +169,11 @@ onMounted(() => {
           并填入下方，AI 调用费用由您的火山账号承担。
         </li>
         <li v-if="isFreePlan">
-          涨粉自动获客中的 AI 自动评论与 AI 自动回复，每日合计不得超过
+          自动垂直养号中的 AI 自动评论与 AI 自动回复，每日合计不得超过
           {{ GROWTH_AI_ACTION_LIMIT }} 次，用完后请改用固定文案或次日再试。
         </li>
         <li v-if="isProPlan">
-          Pro 版使用高级大模型；配置并验证 Pro API Key 后，涨粉自动获客中的
+          Pro 版使用高级大模型；配置并验证 Pro API Key 后，自动垂直养号中的
           <strong>AI 评论与 AI 回复不限次数</strong>。
         </li>
         <li v-if="isProPlan">

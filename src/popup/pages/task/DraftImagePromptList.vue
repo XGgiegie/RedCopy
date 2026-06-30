@@ -585,7 +585,7 @@ async function cacheGeneratedImageForUpload(url: string): Promise<string> {
       每条提示词可直接文生图；上传 / 拖拽 / 粘贴（Ctrl+V）参考图后转为图生图（支持多图融合），生成前可自由编辑提示词与尺寸。若点击「上传配图」无法弹出文件框，请改用拖拽或粘贴。
     </NText>
     <NText depth="3" class="image-prompt-hint image-prompt-hint--warn">
-      AI 分析或生图进行中请不要离开当前页面，避免结果返回前无法写入任务导致数据丢失。
+      生成或生图进行中请不要离开当前页面，避免结果返回前无法写入任务导致数据丢失。
     </NText>
 
     <div v-if="promptCount === 0" class="image-prompt-empty">

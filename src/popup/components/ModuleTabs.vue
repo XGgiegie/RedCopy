@@ -1,16 +1,16 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { MODULE_ANALYSIS, MODULE_GROWTH } from '../../shared/brand'
+import { MODULE_CREATION, MODULE_GROWTH } from '../../shared/brand'
 
 const route = useRoute()
 const router = useRouter()
 
 const activeModule = computed(() => route.name)
 
-function goAnalysis() {
-  if (route.name !== 'analysis') {
-    void router.push({ name: 'analysis' })
+function goCreation() {
+  if (route.name !== 'creation') {
+    void router.push({ name: 'creation' })
   }
 }
 
@@ -26,10 +26,10 @@ function goGrowth() {
     <button
       type="button"
       class="module-tab"
-      :class="{ 'module-tab--active': activeModule === 'analysis' }"
-      @click="goAnalysis"
+      :class="{ 'module-tab--active': activeModule === 'creation' }"
+      @click="goCreation"
     >
-      {{ MODULE_ANALYSIS }}
+      {{ MODULE_CREATION }}
     </button>
     <button
       type="button"

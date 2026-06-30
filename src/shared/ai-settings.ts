@@ -30,7 +30,7 @@ export type DoubaoModel = (typeof DOUBAO_MODEL_OPTIONS)[number]['value']
 /** 设置页展示的能力说明 */
 export const DOUBAO_CAPABILITY_SUMMARY = {
   title: '免费版 · 豆包（火山方舟）',
-  supports: ['文本分析', '配图识别', '生成类似笔记', 'AI 配图生成'],
+  supports: ['文本分析', '配图识别', '生成创作草稿', 'AI 配图生成'],
   modelHint: '可选模型：Lite（默认）/ Mini / Pro',
   note: '分析与生成功能均使用同一 ARK API Key，在任务详情页切换模型。',
 } as const
@@ -146,7 +146,7 @@ export function isAiConfigured(settings: AiSettings): boolean {
   return settings.apiKey.trim().length > 0
 }
 
-/** Pro 版是否享有无限获客 AI 评论/回复 */
+/** Pro 版是否享有无限养号 AI 评论/回复 */
 export function hasUnlimitedGrowthAi(settings: AiSettings): boolean {
   return settings.plan === 'pro' && settings.proApiKey.trim().length > 0
 }
@@ -162,7 +162,7 @@ export function isAnalysisConfigured(settings: AiSettings): boolean {
   return isAiConfigured(settings)
 }
 
-/** 生成类似笔记与 AI 分析共用同一 Key */
+/** 生成创作草稿与生成前分析共用同一 Key */
 export function isGenerateConfigured(settings: AiSettings): boolean {
   return isAiConfigured(settings)
 }

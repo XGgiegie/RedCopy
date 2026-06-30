@@ -26,8 +26,6 @@ import type {
 import { normalizeGeneratedDraft } from '../../../shared/parse-generated-draft'
 import {
   copyTextToClipboard,
-  formatAnalysisAsMarkdown,
-  formatAnalysisAsPlainText,
   formatDraftAsMarkdown,
   formatDraftAsPlainText,
   formatNoteAsMarkdown,
@@ -40,6 +38,7 @@ import {
 } from '../../../shared/note-media'
 import {
   IMAGE_TO_DATA_URL_MESSAGE,
+  type AnalyzeGenerateTaskStatus,
   type ImageToDataUrlResponse,
 } from '../../../shared/messages'
 import type {
@@ -48,10 +47,11 @@ import type {
 } from '../../../shared/publish-xhs'
 import { type Task, deleteTask, getTask, updateTask } from '../../../shared/task-db'
 import type { ContentView, ContentViewOption } from '../../types/content-view'
-import { analyzeNoteText } from '../../services/analyze-note'
-import { generateNoteDraft } from '../../services/generate-note'
+import {
+  getAnalyzeGenerateTaskStatus,
+  startAnalyzeGenerateTask,
+} from '../../services/background-tasks'
 import { openPublishPage } from '../../services/publish-to-xhs'
-import AnalysisCard from './AnalysisCard.vue'
 import AnalyzeBar from './AnalyzeBar.vue'
 import ContentViewTabs from './ContentViewTabs.vue'
 import DraftEditorCard from './DraftEditorCard.vue'
@@ -76,6 +76,13 @@ const generateTopic = ref('')
 
 const isAnalyzing = computed(() => taskOps.isAnalyzing(taskId.value))
 const isGenerating = computed(() => taskOps.isGenerating(taskId.value))
+const isGeneratingDraft = computed(() => isAnalyzing.value || isGenerating.value)
+const analyzeGenerateStatus = ref<AnalyzeGenerateTaskStatus | null>(null)
+const analyzeGenerateHint = computed(() =>
+  analyzeGenerateStatus.value?.running
+    ? '后台生成中，侧边栏关闭也会继续'
+    : '',
+)
 const showGenerateDialog = ref(false)
 const isDownloadingAllImages = ref(false)
 const downloadingImageIndex = ref<number | null>(null)
@@ -116,8 +123,8 @@ function onStorageChanged(
 // ── 任务内容（派生自 task） ──────────────────────────────────
 
 const note = computed(() => task.value?.note ?? null)
+const isDirectCreation = computed(() => task.value?.creationMode === 'direct')
 const noteType = computed(() => task.value?.noteType ?? 'normal')
-const analysis = computed(() => task.value?.analysis ?? null)
 const images = computed(() => task.value?.note.images ?? [])
 const imageHistory = computed(() => task.value?.imageHistory ?? [])
 const publishDialogImages = computed(() =>
@@ -132,8 +139,7 @@ const publishDialogRecords = computed(() => [
   ),
 ])
 
-const hasNote = computed(() => !!note.value)
-const hasAnalysis = computed(() => !!analysis.value)
+const hasNote = computed(() => !!note.value && !isDirectCreation.value)
 const hasDraft = computed(() => !!draftModel.value)
 
 const noteBodyText = computed(() => {
@@ -346,24 +352,27 @@ async function ensurePublishImagesAreLocalBase64(
   return records.map((record) => convertedById.get(record.id) ?? record)
 }
 
-// ── 视图切换（笔记 / 分析 / 类似笔记） ───────────────────────
+// ── 视图切换（笔记 / 创作草稿） ─────────────────────────────
 
 const contentViewOptions = computed<ContentViewOption[]>(() => {
   const options: ContentViewOption[] = []
-  if (note.value) options.push({ label: '笔记', value: 'note' })
-  if (analysis.value) options.push({ label: 'AI 分析', value: 'analysis' })
-  if (draftModel.value) options.push({ label: '类似笔记', value: 'draft' })
+  if (note.value && !isDirectCreation.value) options.push({ label: '笔记', value: 'note' })
+  if (draftModel.value) options.push({ label: '创作草稿', value: 'draft' })
   return options
 })
 const canSwitchView = computed(() => contentViewOptions.value.length >= 2)
 
 function isActiveView(view: ContentView): boolean {
-  if (!canSwitchView.value) return true
+  if (!canSwitchView.value) {
+    return contentViewOptions.value[0]?.value === view
+  }
   return contentView.value === view
 }
-const showNoteSection = computed(() => !!note.value && isActiveView('note'))
-const showAnalysisSection = computed(() => !!analysis.value && isActiveView('analysis'))
+const showNoteSection = computed(() => !!note.value && !isDirectCreation.value && isActiveView('note'))
 const showDraftSection = computed(() => !!draftModel.value && isActiveView('draft'))
+const showDirectCreationPlaceholder = computed(
+  () => isDirectCreation.value && !draftModel.value,
+)
 
 // ── 加载任务 ────────────────────────────────────────────────
 
@@ -380,8 +389,10 @@ async function loadTask(id: string) {
     const normalizedDraft = found.draft ? normalizeDraft(found.draft) : null
     draftModel.value = normalizedDraft
     generateTopic.value = found.generateTopic ?? ''
-    contentView.value = found.draft ? 'draft' : found.analysis ? 'analysis' : 'note'
-    selectedIndices.value = (found.note.images ?? []).map((_, index) => index)
+    contentView.value = found.draft || found.creationMode === 'direct' ? 'draft' : 'note'
+    selectedIndices.value = found.creationMode === 'direct'
+      ? []
+      : (found.note.images ?? []).map((_, index) => index)
     publishImageIds.value = []
 
     // 修复历史未解析成功的 JSON 草稿，或迁移旧版 imageTips → imagePrompts
@@ -406,118 +417,130 @@ async function loadTask(id: string) {
 
 watch(taskId, (id) => void loadTask(id), { immediate: true })
 
+let analyzeGeneratePollTimer: ReturnType<typeof setInterval> | null = null
+
+async function syncAnalyzeGenerateTask(showFinishedMessage = false) {
+  const id = taskId.value
+  if (!id) return
+
+  try {
+    const response = await getAnalyzeGenerateTaskStatus(id)
+    const status = response.status ?? null
+    const wasRunning = Boolean(analyzeGenerateStatus.value?.running)
+    analyzeGenerateStatus.value = status
+    taskOps.syncAnalyzeGenerateStatus(id, status)
+
+    if (status?.running) return
+
+    if (wasRunning || showFinishedMessage) {
+      await loadTask(id)
+      const refreshedDraft = task.value?.draft ? normalizeDraft(task.value.draft) : null
+      if (status?.error) {
+        message.error(`生成失败：${status.error}`)
+      } else if ((wasRunning || showFinishedMessage) && refreshedDraft) {
+        showGenerateDialog.value = false
+        draftModel.value = refreshedDraft
+        contentView.value = 'draft'
+        message.success('创作草稿已生成，可直接编辑')
+      }
+    }
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    console.warn('[RedCopy] 同步后台生成状态失败', { id, detail }, error)
+  }
+}
+
+function startAnalyzeGeneratePolling() {
+  if (analyzeGeneratePollTimer) return
+  analyzeGeneratePollTimer = setInterval(() => {
+    void syncAnalyzeGenerateTask()
+  }, 1600)
+}
+
+function stopAnalyzeGeneratePolling() {
+  if (!analyzeGeneratePollTimer) return
+  clearInterval(analyzeGeneratePollTimer)
+  analyzeGeneratePollTimer = null
+}
+
+watch(
+  () => analyzeGenerateStatus.value?.running,
+  (running) => {
+    if (running) startAnalyzeGeneratePolling()
+    else stopAnalyzeGeneratePolling()
+  },
+)
+
+watch(
+  taskId,
+  () => {
+    analyzeGenerateStatus.value = null
+    void syncAnalyzeGenerateTask()
+  },
+  { immediate: true },
+)
+
 watch(imageHistory, (records) => {
   const recordIds = new Set(records.map((record) => record.id))
   publishImageIds.value = publishImageIds.value.filter((id) => recordIds.has(id))
 })
 
-// ── 分析（捕获 id，避免切换任务时结果串台） ──────────────────
-
-async function handleAnalyze() {
-  const current = task.value
-  if (!current) return
-  const id = current.id
-
-  if (!current.note) {
-    message.warning('当前任务无笔记内容')
-    return
-  }
-  if (
-    current.note.images?.length &&
-    selectedImageUrls.value.length === 0
-  ) {
-    message.warning('请至少选择一张配图参与分析')
-    return
-  }
-
-  taskOps.start(id, 'analyzing')
-  try {
-    const imageUrls =
-      selectedImageUrls.value.length > 0 ? selectedImageUrls.value : undefined
-
-    const analysisResult = await analyzeNoteText({
-      noteId: current.noteId,
-      url: current.url,
-      text: current.note,
-      imageUrls,
-    })
-
-    const updated = await updateTask(id, {
-      analysis: analysisResult,
-      analyzedAt: Date.now(),
-    })
-
-    // 仅当用户仍停留在该任务时才刷新视图，否则结果只静默落库
-    if (taskId.value === id && updated) {
-      task.value = updated
-      contentView.value = 'analysis'
-    }
-
-    message.success(
-      imageUrls?.length
-        ? `AI 分析完成（已识别 ${imageUrls.length} 张配图）`
-        : 'AI 分析完成，可生成类似笔记',
-    )
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error)
-    console.error('[RedCopy] AI 分析失败', { id, detail }, error)
-    message.error(`分析失败：${detail}`)
-  } finally {
-    taskOps.stop(id, 'analyzing')
-  }
-}
-
-// ── 生成类似笔记 ────────────────────────────────────────────
+// ── 创作草稿生成 ────────────────────────────────────────────
 
 function openGenerateDialog() {
-  if (!analysis.value) {
-    message.warning('请先完成 AI 分析')
+  const current = task.value
+  if (!current?.note && !isDirectCreation.value) {
+    message.warning('当前任务无笔记内容')
     return
   }
   showGenerateDialog.value = true
 }
 
-async function handleGenerate(topicInput?: string) {
+async function handleAnalyzeAndGenerate(topicInput?: string) {
   const current = task.value
   if (!current) return
   const id = current.id
 
-  if (!current.analysis) {
-    message.warning('请先完成 AI 分析，再生成类似笔记')
+  if (!current.note && !isDirectCreation.value) {
+    message.warning('当前任务无笔记内容')
+    return
+  }
+  if (
+    !isDirectCreation.value &&
+    current.note.images?.length &&
+    selectedImageUrls.value.length === 0
+  ) {
+    message.warning('请至少选择一张配图参与生成')
     return
   }
 
   if (topicInput !== undefined) generateTopic.value = topicInput
-  taskOps.start(id, 'generating')
+
   try {
-    const draft = await generateNoteDraft({
-      noteId: current.noteId,
-      url: current.url,
-      text: current.note,
-      analysis: current.analysis,
+    const imageUrls =
+      !isDirectCreation.value && selectedImageUrls.value.length > 0
+        ? selectedImageUrls.value
+        : undefined
+
+    const response = await startAnalyzeGenerateTask({
+      taskId: id,
+      mode: isDirectCreation.value ? 'direct' : 'note_analysis',
       topic: generateTopic.value,
+      imageUrls,
     })
-    const normalized = normalizeDraft(draft)
-
-    const updated = await updateTask(id, {
-      draft: normalized,
-      generatedAt: Date.now(),
-      generateTopic: generateTopic.value,
-    })
-
-    if (taskId.value === id && updated) {
-      task.value = updated
-      draftModel.value = normalized
-      contentView.value = 'draft'
-    }
     showGenerateDialog.value = false
-    message.success('类似笔记已生成，可直接编辑')
+    analyzeGenerateStatus.value = response.status ?? null
+    taskOps.syncAnalyzeGenerateStatus(id, response.status)
+    startAnalyzeGeneratePolling()
+    message.success(
+      isDirectCreation.value
+        ? '已开始后台直接创作，关闭侧边栏也会继续'
+        : '已开始后台仿照创作，关闭侧边栏也会继续',
+    )
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error)
-    console.error('[RedCopy] 生成类似笔记失败', { id, detail }, error)
-    message.error(`生成失败：${detail}`)
-  } finally {
-    taskOps.stop(id, 'generating')
+    console.error('[RedCopy] 启动后台创作失败', { id, detail }, error)
+    message.error(`启动失败：${detail}`)
   }
 }
 
@@ -712,27 +735,11 @@ async function handleDownloadImage(index: number) {
   }
 }
 
-function handleCopyAnalysisText() {
-  if (!analysis.value) return
-  void copyWith(
-    () => copyTextToClipboard(formatAnalysisAsPlainText(analysis.value!)),
-    'AI 分析已复制',
-  )
-}
-
-function handleCopyAnalysisMarkdown() {
-  if (!analysis.value) return
-  void copyWith(
-    () => copyTextToClipboard(formatAnalysisAsMarkdown(analysis.value!)),
-    'AI 分析 Markdown 已复制',
-  )
-}
-
 function handleCopyDraftText() {
   if (!draftModel.value) return
   void copyWith(
     () => copyTextToClipboard(formatDraftAsPlainText(draftModel.value!)),
-    '类似笔记已复制',
+    '创作草稿已复制',
   )
 }
 
@@ -740,7 +747,7 @@ function handleCopyDraftMarkdown() {
   if (!draftModel.value) return
   void copyWith(
     () => copyTextToClipboard(formatDraftAsMarkdown(draftModel.value!)),
-    '类似笔记 Markdown 已复制',
+    '创作草稿 Markdown 已复制',
   )
 }
 
@@ -752,7 +759,7 @@ async function handleDeleteTask() {
   try {
     await deleteTask(id)
     message.success('已删除任务')
-    void router.push('/analysis')
+    void router.push('/creation')
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error)
     console.error('[RedCopy] 删除任务失败', { id, detail }, error)
@@ -770,6 +777,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  stopAnalyzeGeneratePolling()
   chrome.storage?.onChanged?.removeListener(onStorageChanged)
   // 离开页面前若仍有未保存的草稿编辑，立即刷盘，避免丢失
   if (persistTimer) {
@@ -787,14 +795,16 @@ onUnmounted(() => {
 
     <div v-else-if="!task" class="task-placeholder">
       任务不存在或已被删除
-      <NButton size="small" class="task-placeholder-btn" @click="router.push('/analysis')">
+      <NButton size="small" class="task-placeholder-btn" @click="router.push('/creation')">
         返回列表
       </NButton>
     </div>
 
     <template v-else>
       <div class="task-toolbar">
-        <h2 class="task-toolbar-title">{{ task.note.title || '（无标题）' }}</h2>
+        <h2 class="task-toolbar-title">
+          {{ draftModel?.title || task.note.title || generateTopic || '（无标题）' }}
+        </h2>
         <NPopconfirm
           positive-text="删除"
           negative-text="取消"
@@ -809,14 +819,14 @@ onUnmounted(() => {
               </svg>
             </NButton>
           </template>
-          确定删除这条任务？分析结果与生成内容将一并删除。
+          确定删除这条任务？生成内容将一并删除。
         </NPopconfirm>
       </div>
 
       <AnalyzeBar
         :content-view="contentView"
+        :is-direct-creation="isDirectCreation"
         :has-note="hasNote"
-        :has-analysis="hasAnalysis"
         :has-draft="hasDraft"
         :is-analyzing="isAnalyzing"
         :is-generating="isGenerating"
@@ -824,17 +834,30 @@ onUnmounted(() => {
         :is-generate-ready="isGenerateReady"
         :model="analysisModel"
         :is-pro-plan="isProPlanRef"
-        @analyze="handleAnalyze"
         @generate="openGenerateDialog"
         @update:model="setAnalysisModel"
         @open-settings="openSettings"
       />
+
+      <NText v-if="analyzeGenerateHint" depth="3" class="background-generate-hint">
+        {{ analyzeGenerateHint }}
+      </NText>
 
       <ContentViewTabs
         v-if="canSwitchView"
         v-model="contentView"
         :options="contentViewOptions"
       />
+
+      <div
+        v-if="showDirectCreationPlaceholder"
+        class="direct-placeholder"
+      >
+        <NText strong class="direct-placeholder-title">直接创作</NText>
+        <NText depth="3" class="direct-placeholder-topic">
+          {{ generateTopic || task.note.title || '未填写创作主题' }}
+        </NText>
+      </div>
 
       <NotePreviewCard
         v-if="showNoteSection && note"
@@ -854,13 +877,6 @@ onUnmounted(() => {
         @set-image-selected="setImageSelected"
         @select-all-images="selectAllImages"
         @clear-image-selection="clearImageSelection"
-      />
-
-      <AnalysisCard
-        v-if="showAnalysisSection && analysis"
-        :analysis="analysis"
-        @copy-text="handleCopyAnalysisText"
-        @copy-markdown="handleCopyAnalysisMarkdown"
       />
 
       <DraftEditorCard
@@ -890,9 +906,10 @@ onUnmounted(() => {
     <GenerateSimilarNoteDialog
       v-model:show="showGenerateDialog"
       :initial-topic="generateTopic"
-      :is-generating="isGenerating"
+      :mode="isDirectCreation ? 'direct' : 'note_analysis'"
+      :is-generating="isGeneratingDraft"
       :has-draft="hasDraft"
-      @confirm="handleGenerate"
+      @confirm="handleAnalyzeAndGenerate"
     />
 
     <NModal
@@ -1046,6 +1063,35 @@ onUnmounted(() => {
   width: 15px;
   height: 15px;
   display: block;
+}
+
+.background-generate-hint {
+  display: block;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #ff2442;
+}
+
+.direct-placeholder {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid #eef0f4;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.direct-placeholder-title {
+  font-size: 13px;
+  color: #1d2129;
+}
+
+.direct-placeholder-topic {
+  display: block;
+  font-size: 12px;
+  line-height: 1.5;
+  word-break: break-word;
 }
 
 .publish-order-modal {
