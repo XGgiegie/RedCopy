@@ -1,14 +1,21 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { NButton, NText, NTooltip, useMessage } from 'naive-ui'
+import { type CreationPurposeKey } from '../../../shared/creation-intent'
 import { type Task, clearAllTasks, createTask, deleteTask, listTasks } from '../../../shared/task-db'
 import { formatAllTasksAsMarkdown } from '../../../shared/export-markdown'
 import { logExtractContentJson } from '../../../shared/extract-log'
 import { downloadTextFile } from '../../../shared/note-media'
+import { isGenerateConfigured, loadAiSettings } from '../../../shared/ai-settings'
 import { extractNoteFromTab } from '../../services/extract-note'
 import { useTaskOperationsStore } from '../../stores/task-operations'
 import { usePageStatusStore } from '../../stores/page-status'
+import {
+  getAnalyzeGenerateTaskStatuses,
+  startAnalyzeGenerateTask,
+} from '../../services/background-tasks'
+import GenerateComposerPanel from '../task/GenerateComposerPanel.vue'
 import TaskListCard from './TaskListCard.vue'
 import AutoCollectDialog from './AutoCollectDialog.vue'
 
@@ -19,18 +26,24 @@ const pageStatus = usePageStatusStore()
 
 const tasks = ref<Task[]>([])
 const isExtracting = ref(false)
+const isDirectCreating = ref(false)
+const directPurpose = ref<CreationPurposeKey | null>(null)
+const directTopic = ref('')
+const directCreateError = ref('')
 const isExporting = ref(false)
 const showAutoCollect = ref(false)
+const activeSubPage = ref<'direct' | 'imitate'>('direct')
 
 const isNotePage = computed(() => pageStatus.isNotePage)
 const isXhsPage = computed(() => pageStatus.isXhsPage)
+let analyzeGenerateStatusTimer: ReturnType<typeof setInterval> | null = null
 
 const busyHint = computed(() => {
   const analyzing = taskOps.analyzingIds.size
   const generating = taskOps.generatingIds.size
   const parts: string[] = []
-  if (analyzing > 0) parts.push(`${analyzing} 个任务 AI 分析中`)
-  if (generating > 0) parts.push(`${generating} 个任务生成中`)
+  if (analyzing > 0) parts.push(`${analyzing} 个任务分析中`)
+  if (generating > 0) parts.push(`${generating} 个任务创作中`)
   return parts.length > 0 ? parts.join('，') : ''
 })
 
@@ -38,7 +51,94 @@ async function refreshTasks() {
   tasks.value = await listTasks()
 }
 
-// ── 提取 ────────────────────────────────────────────────────
+function createBlankNote(title: string) {
+  return {
+    title,
+    desc: '',
+    author: '',
+    tags: [],
+    publishTime: '',
+    likedCount: '',
+    collectedCount: '',
+    commentCount: '',
+    allText: '',
+    images: [],
+  }
+}
+
+async function syncAnalyzeGenerateStatuses(refreshWhenFinished = false) {
+  try {
+    const previousBusyCount = taskOps.busyCount
+    const response = await getAnalyzeGenerateTaskStatuses()
+    taskOps.syncAnalyzeGenerateStatuses(response.statuses ?? {})
+    if (refreshWhenFinished && taskOps.busyCount < previousBusyCount) {
+      await refreshTasks()
+    }
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    console.warn('[RedCopy] 同步后台生成任务状态失败', detail, error)
+  }
+}
+
+// ── 创作入口 ────────────────────────────────────────────────
+
+async function handleDirectCreate() {
+  const purpose = directPurpose.value
+  const topic = directTopic.value.trim()
+  directCreateError.value = ''
+  if (!purpose) {
+    directCreateError.value = '请先选择笔记主题。'
+    message.warning('请先选择创作目的')
+    return
+  }
+  if (!topic) {
+    directCreateError.value = '请先填写明确主题、卖点、场景或案例。'
+    message.warning('请先填写明确主题或卖点')
+    return
+  }
+
+  isDirectCreating.value = true
+  try {
+    const settings = await loadAiSettings()
+    if (!isGenerateConfigured(settings)) {
+      directCreateError.value = '缺少可用的 API Key，请先完成配置后再创作。'
+      message.warning('请先配置 API Key 后再创作')
+      void router.push('/settings')
+      return
+    }
+
+    const title = topic.length > 28 ? `${topic.slice(0, 28)}…` : topic
+    const task = await createTask({
+      noteId: null,
+      url: '',
+      note: createBlankNote(title),
+      noteType: 'normal',
+      creationMode: 'direct',
+      generatePurpose: purpose,
+      generateTopic: topic,
+    })
+    const response = await startAnalyzeGenerateTask({
+      taskId: task.id,
+      mode: 'direct',
+      purpose,
+      topic,
+    })
+    taskOps.syncAnalyzeGenerateStatus(task.id, response.status)
+    directPurpose.value = null
+    directTopic.value = ''
+    directCreateError.value = ''
+    await refreshTasks()
+    message.success('已开始直接创作，任务会在后台继续')
+    void router.push({ name: 'task', params: { id: task.id } })
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    console.error('[RedCopy] 直接创作启动失败', detail, error)
+    directCreateError.value = detail
+    message.error(`直接创作失败：${detail}`)
+  } finally {
+    isDirectCreating.value = false
+  }
+}
 
 async function handleExtract() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
@@ -64,10 +164,11 @@ async function handleExtract() {
       url: extract.url,
       note: extract.text,
       noteType: extract.noteType,
+      creationMode: 'note_analysis',
     })
     await refreshTasks()
 
-    message.success('已提取并加入任务，进入后可分析')
+    message.success('已提取参考笔记，可进入任务仿照创作')
     console.info('[RedCopy] 提取成功', {
       id: task.id,
       noteId: extract.noteId,
@@ -82,11 +183,11 @@ async function handleExtract() {
   }
 }
 
-// ── 一键导出全部笔记（Markdown 文件下载） ───────────────────
+// ── 一键导出全部创作任务（Markdown 文件下载） ───────────────
 
 async function handleExportAll() {
   if (tasks.value.length === 0) {
-    message.warning('暂无可导出的笔记')
+    message.warning('暂无可导出的创作任务')
     return
   }
 
@@ -97,9 +198,9 @@ async function handleExportAll() {
       .toLocaleString('zh-CN', { hour12: false })
       .replace(/[/:]/g, '-')
       .replace(/\s+/g, '_')
-    await downloadTextFile(markdown, `全部笔记-${stamp}.md`)
-    message.success(`已导出 ${tasks.value.length} 条笔记`)
-    console.info('[RedCopy] 全部笔记已导出', { count: tasks.value.length })
+    await downloadTextFile(markdown, `全部创作任务-${stamp}.md`)
+    message.success(`已导出 ${tasks.value.length} 条创作任务`)
+    console.info('[RedCopy] 全部创作任务已导出', { count: tasks.value.length })
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error)
     console.error('[RedCopy] 导出全部笔记失败', detail, error)
@@ -127,7 +228,7 @@ async function handleDelete(id: string) {
 
 async function handleClearAll() {
   if (tasks.value.length === 0) {
-    message.warning('暂无历史任务')
+    message.warning('暂无创作任务')
     return
   }
   if (taskOps.busyCount > 0) {
@@ -148,8 +249,19 @@ async function handleClearAll() {
 
 onMounted(() => {
   void refreshTasks()
+  void syncAnalyzeGenerateStatuses()
+  analyzeGenerateStatusTimer = setInterval(() => {
+    void syncAnalyzeGenerateStatuses(true)
+  }, 2200)
   // 进入首页时主动同步一次当前标签页状态（监听由 App 根组件常驻维护）
   void pageStatus.syncActiveTab()
+})
+
+onUnmounted(() => {
+  if (analyzeGenerateStatusTimer) {
+    clearInterval(analyzeGenerateStatusTimer)
+    analyzeGenerateStatusTimer = null
+  }
 })
 
 // 后台分析/生成结束后刷新列表，更新进度条
@@ -166,7 +278,7 @@ watch(
 watch(
   () => router.currentRoute.value.name,
   (name) => {
-    if (name === 'analysis') void refreshTasks()
+    if (name === 'creation') void refreshTasks()
   },
 )
 </script>
@@ -178,43 +290,83 @@ watch(
         <NText depth="3" class="busy-hint-text">{{ busyHint }}</NText>
       </div>
 
-      <div class="extract-row">
-        <NTooltip trigger="hover" :disabled="isNotePage">
-          <template #trigger>
-            <NButton
-              type="primary"
-              size="medium"
-              class="extract-btn"
-              :loading="isExtracting"
-              :disabled="!isNotePage"
-              @click="handleExtract"
-            >
-              提取当前笔记
-            </NButton>
-          </template>
-          {{ isNotePage ? '提取当前笔记到任务列表' : '请先打开小红书笔记详情页' }}
-        </NTooltip>
+      <nav class="creation-subnav" aria-label="创作二级导航">
+        <button
+          type="button"
+          class="creation-subnav-btn"
+          :class="{ 'creation-subnav-btn--active': activeSubPage === 'direct' }"
+          @click="activeSubPage = 'direct'"
+        >
+          直接创作
+        </button>
+        <button
+          type="button"
+          class="creation-subnav-btn"
+          :class="{ 'creation-subnav-btn--active': activeSubPage === 'imitate' }"
+          @click="activeSubPage = 'imitate'"
+        >
+          仿照创作
+        </button>
+      </nav>
 
-        <NTooltip trigger="hover">
-          <template #trigger>
-            <NButton
-              secondary
-              size="medium"
-              class="auto-btn"
-              :disabled="!isXhsPage"
-              @click="showAutoCollect = true"
-            >
-              <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" class="auto-btn-icon">
-                <path
-                  d="M10 2a1 1 0 0 1 1 1v1.07A5.002 5.002 0 0 1 15.93 9H17a1 1 0 1 1 0 2h-1.07A5.002 5.002 0 0 1 11 15.93V17a1 1 0 1 1-2 0v-1.07A5.002 5.002 0 0 1 4.07 11H3a1 1 0 1 1 0-2h1.07A5.002 5.002 0 0 1 9 4.07V3a1 1 0 0 1 1-1Zm0 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm0 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4Z"
-                />
-              </svg>
-              自动
-            </NButton>
-          </template>
-          {{ isXhsPage ? '按关键词搜索并自动筛选入库' : '请先打开小红书网站' }}
-        </NTooltip>
-      </div>
+      <section v-if="activeSubPage === 'direct'" class="creation-module">
+        <GenerateComposerPanel
+          mode="direct"
+          :purpose="directPurpose"
+          :topic="directTopic"
+          :is-generating="isDirectCreating"
+          :has-draft="false"
+          :error-message="directCreateError"
+          @update:purpose="directPurpose = $event"
+          @update:topic="directTopic = $event"
+          @confirm="handleDirectCreate"
+        />
+      </section>
+
+      <section v-else class="creation-module">
+        <div class="module-heading">
+          <NText strong class="module-title">仿照创作</NText>
+          <NText depth="3" class="module-subtitle">提取参考笔记，再仿照结构与卖点生成草稿</NText>
+        </div>
+
+        <div class="extract-row">
+          <NTooltip trigger="hover" :disabled="isNotePage">
+            <template #trigger>
+              <NButton
+                type="primary"
+                size="medium"
+                class="extract-btn"
+                :loading="isExtracting"
+                :disabled="!isNotePage"
+                @click="handleExtract"
+              >
+                提取当前笔记
+              </NButton>
+            </template>
+            {{ isNotePage ? '提取当前笔记到创作任务' : '请先打开小红书笔记详情页' }}
+          </NTooltip>
+
+          <NTooltip trigger="hover">
+            <template #trigger>
+              <NButton
+                secondary
+                size="medium"
+                class="auto-btn"
+                :disabled="!isXhsPage"
+                @click="showAutoCollect = true"
+              >
+                <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" class="auto-btn-icon">
+                  <path
+                    d="M10 2a1 1 0 0 1 1 1v1.07A5.002 5.002 0 0 1 15.93 9H17a1 1 0 1 1 0 2h-1.07A5.002 5.002 0 0 1 11 15.93V17a1 1 0 1 1-2 0v-1.07A5.002 5.002 0 0 1 4.07 11H3a1 1 0 1 1 0-2h1.07A5.002 5.002 0 0 1 9 4.07V3a1 1 0 0 1 1-1Zm0 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm0 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4Z"
+                  />
+                </svg>
+                自动
+              </NButton>
+            </template>
+            {{ isXhsPage ? '按关键词搜索并自动筛选入库' : '请先打开小红书网站' }}
+          </NTooltip>
+        </div>
+      </section>
 
       <AutoCollectDialog
         v-model:show="showAutoCollect"
@@ -227,6 +379,8 @@ watch(
         class="task-section"
         :tasks="tasks"
         :exporting="isExporting"
+        title="创作任务"
+        empty-text="直接创作或仿照创作后显示在这里"
         @open="openTask"
         @delete="handleDelete"
         @export-all="handleExportAll"
@@ -264,10 +418,73 @@ watch(
   padding: 10px 12px 12px;
 }
 
+.creation-subnav {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.creation-subnav-btn {
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid #e5e6eb;
+  border-radius: 7px;
+  background: #fff;
+  color: #4e5969;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.creation-subnav-btn:hover {
+  color: #ff2442;
+  border-color: #ffb3c0;
+  background: #fff5f6;
+}
+
+.creation-subnav-btn--active,
+.creation-subnav-btn--active:hover {
+  color: #ff2442;
+  border-color: #ffccc7;
+  background: #fff1f0;
+}
+
 .extract-row {
   display: flex;
   align-items: stretch;
   gap: 8px;
+}
+
+.creation-module {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #eef0f4;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.module-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.module-title {
+  flex-shrink: 0;
+  font-size: 13px;
+  color: #1d2129;
+}
+
+.module-subtitle {
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: right;
 }
 
 .extract-btn {

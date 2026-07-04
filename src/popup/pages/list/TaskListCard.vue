@@ -12,8 +12,8 @@ const props = withDefaults(
     showToolbar?: boolean
   }>(),
   {
-    title: '历史任务',
-    emptyText: '提取后显示在这里',
+    title: '创作任务',
+    emptyText: '直接创作或仿照创作后显示在这里',
     showToolbar: true,
   },
 )
@@ -26,6 +26,17 @@ const emit = defineEmits<{
 }>()
 
 const taskOps = useTaskOperationsStore()
+
+function taskTitle(task: Task): string {
+  if (task.creationMode === 'direct') {
+    return task.draft?.title || task.note.title || task.generateTopic || '（无标题）'
+  }
+  return task.note.title || '（无标题）'
+}
+
+function taskModeLabel(task: Task): string {
+  return task.creationMode === 'direct' ? '直接创作' : '仿照创作'
+}
 </script>
 
 <template>
@@ -42,7 +53,7 @@ const taskOps = useTaskOperationsStore()
               class="tool-btn"
               :class="{ 'tool-btn--busy': exporting }"
               :disabled="exporting"
-              aria-label="导出全部笔记"
+              aria-label="导出全部创作任务"
               @click="emit('exportAll')"
             >
               <span v-if="exporting" class="tool-btn-spinner" aria-hidden="true" />
@@ -52,7 +63,7 @@ const taskOps = useTaskOperationsStore()
               <span class="tool-btn-text">导出</span>
             </button>
           </template>
-          导出全部笔记为 Markdown 文件
+          导出全部创作任务为 Markdown 文件
         </NTooltip>
 
         <NPopconfirm
@@ -77,10 +88,10 @@ const taskOps = useTaskOperationsStore()
                   <span class="tool-btn-text">清空</span>
                 </button>
               </template>
-              {{ taskOps.busyCount > 0 ? '有任务进行中，暂不可清空' : '清空全部历史任务' }}
+              {{ taskOps.busyCount > 0 ? '有任务进行中，暂不可清空' : '清空全部创作任务' }}
             </NTooltip>
           </template>
-          确定清空全部 {{ tasks.length }} 条历史任务？分析结果与生成内容将一并删除。
+          确定清空全部 {{ tasks.length }} 条创作任务？生成内容将一并删除。
         </NPopconfirm>
       </div>
     </div>
@@ -101,20 +112,27 @@ const taskOps = useTaskOperationsStore()
           <div class="task-item-content">
             <div class="task-item-title-row">
               <NText strong class="task-item-title">
-                {{ task.note.title || '（无标题）' }}
+                {{ taskTitle(task) }}
               </NText>
+              <span class="mode-tag">{{ taskModeLabel(task) }}</span>
               <span v-if="taskOps.getStatusLabel(task.id)" class="task-status-badge">
                 <span class="task-status-spinner" aria-hidden="true" />
                 {{ taskOps.getStatusLabel(task.id) }}
               </span>
             </div>
             <div class="task-item-meta">
-              <span>{{ task.note.author || '未知作者' }}</span>
-              <span class="meta-dot" aria-hidden="true">·</span>
+              <template v-if="task.creationMode !== 'direct'">
+                <span>{{ task.note.author || '未知作者' }}</span>
+                <span class="meta-dot" aria-hidden="true">·</span>
+              </template>
               <span>{{ formatTaskTime(task.extractedAt) }}</span>
               <span v-if="task.noteType === 'video'" class="meta-tag">视频</span>
             </div>
-            <div class="task-item-stats" aria-label="互动数据">
+            <div
+              v-if="task.creationMode !== 'direct'"
+              class="task-item-stats"
+              aria-label="互动数据"
+            >
               <span class="stat-chip" title="点赞">
                 <span class="stat-icon" aria-hidden="true">❤️</span>
                 {{ task.note.likedCount || '0' }}
@@ -129,29 +147,19 @@ const taskOps = useTaskOperationsStore()
               </span>
             </div>
             <div class="task-pipeline" aria-label="进度">
-              <span class="pipe-step pipe-step--done" title="已提取">提取</span>
               <span
-                class="pipe-line"
-                :class="{
-                  'pipe-line--done': task.analysis,
-                  'pipe-line--active': taskOps.isAnalyzing(task.id) && !task.analysis,
-                }"
-              />
-              <span
-                class="pipe-step"
-                :class="{
-                  'pipe-step--done': task.analysis,
-                  'pipe-step--active': taskOps.isAnalyzing(task.id),
-                }"
-                title="AI 分析"
+                class="pipe-step pipe-step--done"
+                :title="task.creationMode === 'direct' ? '已填写主题' : '已提取'"
               >
-                分析
+                {{ task.creationMode === 'direct' ? '主题' : '提取' }}
               </span>
               <span
                 class="pipe-line"
                 :class="{
                   'pipe-line--done': task.draft,
-                  'pipe-line--active': taskOps.isGenerating(task.id) && !task.draft,
+                  'pipe-line--active':
+                    (taskOps.isAnalyzing(task.id) || taskOps.isGenerating(task.id))
+                    && !task.draft,
                 }"
               />
               <span
@@ -159,12 +167,13 @@ const taskOps = useTaskOperationsStore()
                 :class="{
                   'pipe-step--done': task.draft,
                   'pipe-step--active':
+                    taskOps.isAnalyzing(task.id) ||
                     taskOps.isGenerating(task.id) ||
                     taskOps.isGeneratingImagesForTask(task.id),
                 }"
-                title="类似笔记"
+                title="创作草稿"
               >
-                生成
+                创作
               </span>
             </div>
           </div>
@@ -195,7 +204,7 @@ const taskOps = useTaskOperationsStore()
               </svg>
             </button>
           </template>
-          确定删除这条任务？分析结果与生成内容将一并删除。
+          确定删除这条创作任务？生成内容将一并删除。
         </NPopconfirm>
       </div>
     </div>
@@ -472,6 +481,18 @@ const taskOps = useTaskOperationsStore()
   color: #d46b08;
   font-size: 10px;
   font-weight: 500;
+}
+
+.mode-tag {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #f2f3f5;
+  color: #4e5969;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
 }
 
 .task-item-stats {

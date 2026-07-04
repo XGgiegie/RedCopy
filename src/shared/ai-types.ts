@@ -49,6 +49,8 @@ export interface GeneratedImageRecord {
 /** AI 生成的爆款笔记草稿 */
 export interface GeneratedNoteDraft {
   title: string
+  /** 爆款标题候选，第一条默认作为 title */
+  titleOptions?: string[]
   body: string
   tags: string[]
   /** 配图生成提示词列表（替代旧版 imageTips 纯文本） */

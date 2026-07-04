@@ -3,6 +3,7 @@ import type {
   GeneratedImageRecord,
   GeneratedNoteDraft,
 } from './ai-types'
+import type { CreationPurposeKey } from './creation-intent'
 import { loadLastAnalysis } from './analysis-storage'
 import { loadLastDraft } from './draft-storage'
 import { loadLastExtract } from './extract-storage'
@@ -23,6 +24,9 @@ const MAX_TASKS = 50
 /** 任务来源：手动提取 vs 涨粉获客自动采集 */
 export type TaskSource = 'manual' | 'growth'
 
+/** 创作模式：直接创作 vs 笔记分析后创作 */
+export type CreationMode = 'direct' | 'note_analysis'
+
 /** 单条任务记录 */
 export interface Task {
   id: string
@@ -32,11 +36,14 @@ export interface Task {
   noteType: NoteMediaType
   /** 未标记的历史数据视为 manual */
   source: TaskSource
+  /** 未标记的历史数据视为笔记分析后创作 */
+  creationMode: CreationMode
   extractedAt: number
   analysis: AiAnalysisResult | null
   analyzedAt: number | null
   draft: GeneratedNoteDraft | null
   generatedAt: number | null
+  generatePurpose: CreationPurposeKey | null
   generateTopic: string
   /** AI 配图生成历史（生成即落库，持久保留） */
   imageHistory: GeneratedImageRecord[]
@@ -45,6 +52,9 @@ export interface Task {
 /** 新建任务时由调用方提供的字段 */
 export type NewTaskInput = Pick<Task, 'noteId' | 'url' | 'note' | 'noteType'> & {
   source?: TaskSource
+  creationMode?: CreationMode
+  generatePurpose?: CreationPurposeKey | null
+  generateTopic?: string
 }
 
 /** 允许更新的字段 */
@@ -55,6 +65,7 @@ export type TaskPatch = Partial<
     | 'analyzedAt'
     | 'draft'
     | 'generatedAt'
+    | 'generatePurpose'
     | 'generateTopic'
     | 'imageHistory'
     | 'note'
@@ -71,6 +82,8 @@ function normalizeTask(task: Task): Task {
   return {
     ...task,
     source: task.source ?? 'manual',
+    creationMode: task.creationMode ?? 'note_analysis',
+    generatePurpose: task.generatePurpose ?? null,
     imageHistory: Array.isArray(task.imageHistory) ? task.imageHistory : [],
   }
 }
@@ -94,11 +107,13 @@ async function buildTaskFromLegacyCaches(): Promise<Task[]> {
     note: extract.note,
     noteType: extract.noteType ?? 'normal',
     source: 'manual',
+    creationMode: 'note_analysis',
     extractedAt: Date.now(),
     analysis: analysis?.analysis ?? null,
     analyzedAt: analysis?.analyzedAt ?? null,
     draft: draft?.draft ?? null,
     generatedAt: draft?.generatedAt ?? null,
+    generatePurpose: null,
     generateTopic: '',
     imageHistory: [],
   }
@@ -151,13 +166,15 @@ export async function createTask(input: NewTaskInput): Promise<Task> {
   const task: Task = {
     ...input,
     source: input.source ?? 'manual',
+    creationMode: input.creationMode ?? 'note_analysis',
     id: createTaskId(),
     extractedAt: Date.now(),
     analysis: null,
     analyzedAt: null,
     draft: null,
     generatedAt: null,
-    generateTopic: '',
+    generatePurpose: input.generatePurpose ?? null,
+    generateTopic: input.generateTopic ?? '',
     imageHistory: [],
   }
   const next = sortByExtractedAt([task, ...tasks]).slice(0, MAX_TASKS)

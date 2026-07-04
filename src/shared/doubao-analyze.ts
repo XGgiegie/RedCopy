@@ -1,6 +1,6 @@
 import type { AiAnalysisResult } from './ai-types'
 import {
-  ANALYSIS_SYSTEM_PROMPT,
+  
   buildAnalysisUserPrompt,
   parseAnalysisContent,
   type AnalyzeNotePayload,
@@ -22,7 +22,7 @@ export async function requestDoubaoAnalysis(
   })
 
   const content = await requestDoubaoResponses(
-    ANALYSIS_SYSTEM_PROMPT,
+    (await (await import('./prompts')).loadPrompts()).analysis,
     userPrompt,
     {
       settings,

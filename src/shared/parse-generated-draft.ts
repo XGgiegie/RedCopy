@@ -14,6 +14,40 @@ function asString(value: unknown): string | undefined {
   return String(value)
 }
 
+function uniqueStrings(values: string[]): string[] {
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const value of values) {
+    const trimmed = value.trim()
+    if (!trimmed || seen.has(trimmed)) continue
+    seen.add(trimmed)
+    result.push(trimmed)
+  }
+  return result
+}
+
+function parseTitleOptions(value: unknown, fallbackTitle: string): string[] {
+  const rawOptions = Array.isArray(value)
+    ? value.map((item) => asString(item) ?? '')
+    : typeof value === 'string'
+      ? value.split(/\n|\/|；|;/)
+      : []
+
+  return uniqueStrings([fallbackTitle, ...rawOptions])
+    .map(limitDraftTitle)
+    .filter(Boolean)
+    .slice(0, 3)
+}
+
+function parseTags(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+
+  return uniqueStrings(value.map((item) => asString(item) ?? ''))
+    .map((tag) => tag.replace(/^#+/, '').trim())
+    .filter(Boolean)
+    .slice(0, 5)
+}
+
 function parseImagePrompts(value: unknown): DraftImagePrompt[] {
   if (!Array.isArray(value)) return []
 
@@ -50,17 +84,22 @@ export function parseGeneratedDraft(content: string): GeneratedNoteDraft {
   const parsed = parseLlmJsonObject(trimmed)
 
   if (parsed) {
-    const title = limitDraftTitle(asString(parsed.title) ?? '')
+    const parsedTitleOptions = parseTitleOptions(parsed.titleOptions, '')
+    const title = limitDraftTitle(
+      asString(parsed.title) ?? parsedTitleOptions[0] ?? '',
+    )
     const body = asString(parsed.body)?.trim()
 
     if (title && body) {
       const imagePrompts = parseImagePrompts(parsed.imagePrompts)
       const legacyTips = asString(parsed.imageTips)
+      const titleOptions = parseTitleOptions(parsed.titleOptions, title)
 
       const draft: GeneratedNoteDraft = {
         title,
+        titleOptions,
         body,
-        tags: Array.isArray(parsed.tags) ? parsed.tags.map(String) : [],
+        tags: parseTags(parsed.tags),
         imagePrompts:
           imagePrompts.length > 0
             ? imagePrompts
@@ -76,6 +115,7 @@ export function parseGeneratedDraft(content: string): GeneratedNoteDraft {
 
   return {
     title: '（生成结果）',
+    titleOptions: ['（生成结果）'],
     body: trimmed,
     tags: [],
     imagePrompts: [],
@@ -104,6 +144,7 @@ export function normalizeGeneratedDraft(draft: GeneratedNoteDraft): GeneratedNot
   return {
     ...base,
     title: limitDraftTitle(base.title),
+    titleOptions: parseTitleOptions(base.titleOptions, base.title),
     tags: base.tags ?? [],
     imagePrompts: normalizeImagePrompts(base),
   }

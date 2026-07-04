@@ -100,6 +100,15 @@ function handleTitleUpdate(value: string) {
   if (limited !== value) {
     draft.value.title = limited
   }
+  draft.value.titleOptions = [
+    limited,
+    ...(draft.value.titleOptions ?? []).filter((item) => item !== limited),
+  ].slice(0, 3)
+  emit('edit')
+}
+
+function useTitleOption(title: string) {
+  draft.value.title = limitDraftTitle(title)
   emit('edit')
 }
 </script>
@@ -107,7 +116,7 @@ function handleTitleUpdate(value: string) {
 <template>
   <div class="content-card draft-card">
     <NSpace align="center" justify="space-between" class="draft-header">
-      <NText strong>类似笔记</NText>
+      <NText strong>创作草稿</NText>
       <NSpace :size="6">
         <NButton
           size="tiny"
@@ -136,6 +145,22 @@ function handleTitleUpdate(value: string) {
         :maxlength="DRAFT_TITLE_MAX_LENGTH"
         @update:value="handleTitleUpdate"
       />
+      <div
+        v-if="draft.titleOptions?.length"
+        class="title-options"
+      >
+        <NButton
+          v-for="(title, index) in draft.titleOptions"
+          :key="`${index}-${title}`"
+          size="tiny"
+          :type="title === draft.title ? 'primary' : 'default'"
+          :secondary="title !== draft.title"
+          class="title-option-btn"
+          @click="useTitleOption(title)"
+        >
+          {{ title }}
+        </NButton>
+      </div>
     </div>
 
     <div class="content-block">
@@ -196,6 +221,25 @@ function handleTitleUpdate(value: string) {
   font-size: 12px;
   line-height: 1.5;
   margin-bottom: 12px;
+}
+
+.title-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.title-option-btn {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.title-option-btn :deep(.n-button__content) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .copyable-tags {

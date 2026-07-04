@@ -1,16 +1,11 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import {
   NButton,
-  NCheckbox,
   NForm,
   NFormItem,
   NInput,
   NInputNumber,
-  NModal,
-  NRadio,
-  NRadioGroup,
-  NSpace,
   NText,
   useMessage,
 } from 'naive-ui'
@@ -22,18 +17,23 @@ import {
 } from '../../../shared/growth-ai-quota'
 import { hasUnlimitedGrowthAi, loadAiSettings } from '../../../shared/ai-settings'
 import {
-  GrowthAcquireCancelledError,
-  runGrowthAcquire,
-} from '../../services/growth-acquire-runner'
+  DEFAULT_GROWTH_REPLY_PROMPT_TEMPLATE_ID,
+  GROWTH_REPLY_PROMPT_TEMPLATES,
+  getGrowthReplyPromptTemplate,
+} from '../../../shared/growth-reply-templates'
+import {
+  getGrowthAcquireTaskStatus,
+  startGrowthAcquireTask,
+  stopGrowthAcquireTask,
+} from '../../services/background-tasks'
 import InfoTip from '../../components/InfoTip.vue'
 import GrowthRunProgressDialog from './GrowthRunProgressDialog.vue'
 
 const props = defineProps<{
-  show: boolean
+  isXhsPage: boolean
 }>()
 
 const emit = defineEmits<{
-  'update:show': [value: boolean]
   completed: []
 }>()
 
@@ -51,7 +51,10 @@ const commentMode = ref<GrowthTextMode>('ai')
 const aiCommentPrompt = ref('结合笔记内容简短夸赞并表达共鸣，自然引导关注或私信交流。')
 const fixedCommentText = ref('写得太好了！学到了，已关注～')
 const replyMode = ref<GrowthTextMode>('ai')
-const aiReplyPrompt = ref('友好简短地回复，自然引导用户关注或私信交流，语气亲切不生硬。')
+const selectedReplyTemplateId = ref(DEFAULT_GROWTH_REPLY_PROMPT_TEMPLATE_ID)
+const aiReplyPrompt = ref(
+  getGrowthReplyPromptTemplate(DEFAULT_GROWTH_REPLY_PROMPT_TEMPLATE_ID).prompt,
+)
 const fixedReplyText = ref('谢谢姐妹的关注～有问题随时私信我呀 💕')
 
 const isRunning = ref(false)
@@ -60,6 +63,7 @@ const progress = ref<GrowthAcquireProgress | null>(null)
 const showProgressDialog = ref(false)
 const growthAiUsed = ref(0)
 const growthAiUnlimited = ref(false)
+let pollTimer: ReturnType<typeof setInterval> | null = null
 
 const usesAiMode = computed(
   () =>
@@ -81,6 +85,16 @@ const aiQuotaHint = computed(() =>
     : `AI 评论与回复每日合计 ${GROWTH_AI_ACTION_LIMIT} 次，今日用完后请改用固定文案或明日再试`,
 )
 
+const selectedReplyTemplate = computed(() =>
+  getGrowthReplyPromptTemplate(selectedReplyTemplateId.value),
+)
+
+function applyReplyTemplate(templateId: string) {
+  const template = getGrowthReplyPromptTemplate(templateId)
+  selectedReplyTemplateId.value = template.id
+  aiReplyPrompt.value = template.prompt
+}
+
 async function refreshAiQuota() {
   const settings = await loadAiSettings()
   growthAiUnlimited.value = hasUnlimitedGrowthAi(settings)
@@ -100,7 +114,7 @@ function resetForm() {
   aiCommentPrompt.value = '结合笔记内容简短夸赞并表达共鸣，自然引导关注或私信交流。'
   fixedCommentText.value = '写得太好了！学到了，已关注～'
   replyMode.value = 'ai'
-  aiReplyPrompt.value = '友好简短地回复，自然引导用户关注或私信交流，语气亲切不生硬。'
+  applyReplyTemplate(DEFAULT_GROWTH_REPLY_PROMPT_TEMPLATE_ID)
   fixedReplyText.value = '谢谢姐妹的关注～有问题随时私信我呀 💕'
   progress.value = null
   cancelled.value = false
@@ -108,42 +122,86 @@ function resetForm() {
   showProgressDialog.value = false
 }
 
-watch(
-  () => props.show,
-  (visible) => {
-    if (visible && isRunning.value) {
-      emit('update:show', false)
+function stopPolling() {
+  if (!pollTimer) return
+  clearInterval(pollTimer)
+  pollTimer = null
+}
+
+function startPolling() {
+  if (pollTimer) return
+  pollTimer = setInterval(() => {
+    void syncBackgroundStatus()
+  }, 1000)
+}
+
+async function syncBackgroundStatus() {
+  try {
+    const response = await getGrowthAcquireTaskStatus()
+    const status = response.status
+    if (!status) return
+
+    const wasRunning = isRunning.value
+    isRunning.value = status.running
+    cancelled.value = status.cancelled
+    progress.value = status.progress
+
+    if (status.running) {
       showProgressDialog.value = true
+      startPolling()
       return
     }
-    if (visible && !isRunning.value) {
-      progress.value = null
-      cancelled.value = false
-      void refreshAiQuota()
-    }
-  },
-)
 
-function close() {
-  emit('update:show', false)
+    stopPolling()
+
+    if (wasRunning) {
+      void refreshAiQuota()
+      if (status.error) {
+        message.error(`自动垂直养号失败：${status.error}`)
+      } else if (status.result) {
+        const summary = `评论 ${status.result.commented} 条，回复 ${status.result.replied} 条`
+        if (status.cancelled || status.progress?.phase === 'cancelled') {
+          message.info(`自动垂直养号已停止：${summary}`)
+        } else {
+          message.success(`自动垂直养号结束：${summary}`)
+        }
+        if (status.result.replied > 0 || status.result.commented > 0) emit('completed')
+      }
+    }
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    console.error('[RedCopy] 同步后台自动垂直养号状态失败', detail, error)
+  }
 }
 
 function cancelRun() {
-  cancelled.value = true
-  progress.value = {
-    phase: 'cancelled',
-    message: '正在停止…',
-    scanned: progress.value?.scanned ?? 0,
-    skipped: progress.value?.skipped ?? 0,
-    replied: progress.value?.replied ?? 0,
-    commented: progress.value?.commented ?? 0,
-    aiUsed: progress.value?.aiUsed ?? 0,
-    remainingSec: progress.value?.remainingSec ?? 0,
-  }
+  void stopGrowthAcquireTask()
+    .then((response) => {
+      cancelled.value = response.status?.cancelled ?? true
+      progress.value = response.status?.progress ?? {
+        phase: 'cancelled',
+        message: '正在停止…',
+        scanned: progress.value?.scanned ?? 0,
+        skipped: progress.value?.skipped ?? 0,
+        replied: progress.value?.replied ?? 0,
+        commented: progress.value?.commented ?? 0,
+        aiUsed: progress.value?.aiUsed ?? 0,
+        remainingSec: progress.value?.remainingSec ?? 0,
+      }
+    })
+    .catch((error) => {
+      const detail = error instanceof Error ? error.message : String(error)
+      message.error(`停止失败：${detail}`)
+    })
 }
 
 async function startRun() {
   if (isRunning.value) return
+
+  if (!props.isXhsPage) {
+    message.warning('请先打开小红书网站')
+    return
+  }
 
   if (!keyword.value.trim()) {
     message.warning('请填写搜索关键词')
@@ -224,69 +282,49 @@ async function startRun() {
     remainingSec: config.durationMinutes * 60,
   }
 
-  emit('update:show', false)
   showProgressDialog.value = true
 
   try {
-    const result = await runGrowthAcquire(config, {
-      onProgress: (value) => {
-        progress.value = value
-      },
-      isCancelled: () => cancelled.value,
-    })
-
-    const summary = `评论 ${result.commented} 条，回复 ${result.replied} 条`
-    if (cancelled.value) {
-      message.info(`自动获客已停止：${summary}`)
-    } else {
-      message.success(`自动获客结束：${summary}`)
-    }
-    if (result.replied > 0 || result.commented > 0) emit('completed')
+    const response = await startGrowthAcquireTask(config)
+    isRunning.value = response.status?.running ?? true
+    cancelled.value = response.status?.cancelled ?? false
+    progress.value = response.status?.progress ?? progress.value
+    showProgressDialog.value = true
+    startPolling()
+    message.success('自动垂直养号已在后台开始，关闭侧栏也会继续运行')
   } catch (error) {
-    if (error instanceof GrowthAcquireCancelledError) {
-      const replied = progress.value?.replied ?? 0
-      const commented = progress.value?.commented ?? 0
-      message.info(
-        replied > 0 || commented > 0
-          ? `自动获客已停止：评论 ${commented} 条，回复 ${replied} 条`
-          : '自动获客已停止',
-      )
-      if (replied > 0 || commented > 0) emit('completed')
-    } else {
-      const detail = error instanceof Error ? error.message : String(error)
-      console.error('[RedCopy][获客] 自动获客失败', detail, error)
-      message.error(`自动获客失败：${detail}`)
-      progress.value = {
-        phase: 'error',
-        message: detail,
-        scanned: progress.value?.scanned ?? 0,
-        skipped: progress.value?.skipped ?? 0,
-        replied: progress.value?.replied ?? 0,
-        commented: progress.value?.commented ?? 0,
-        aiUsed: progress.value?.aiUsed ?? 0,
-        remainingSec: progress.value?.remainingSec ?? 0,
-      }
+    const detail = error instanceof Error ? error.message : String(error)
+    console.error('[RedCopy][获客] 启动后台自动垂直养号失败', detail, error)
+    message.error(`自动垂直养号失败：${detail}`)
+    progress.value = {
+      phase: 'error',
+      message: detail,
+      scanned: progress.value?.scanned ?? 0,
+      skipped: progress.value?.skipped ?? 0,
+      replied: progress.value?.replied ?? 0,
+      commented: progress.value?.commented ?? 0,
+      aiUsed: progress.value?.aiUsed ?? 0,
+      remainingSec: progress.value?.remainingSec ?? 0,
     }
-  } finally {
     isRunning.value = false
     void refreshAiQuota()
   }
 }
+
+onMounted(() => {
+  void syncBackgroundStatus()
+})
+
+onUnmounted(() => {
+  stopPolling()
+})
 </script>
 
 <template>
-  <NModal
-    :show="show"
-    preset="card"
-    class="growth-collect-dialog"
-    :style="{ width: 'min(400px, calc(100vw - 24px))' }"
-    :content-style="{ padding: '12px 16px 0' }"
-    title="涨粉自动获客"
-    @update:show="emit('update:show', $event)"
-  >
+  <section class="growth-collect-panel">
     <div class="dialog-scroll-body">
       <NText depth="3" class="dialog-hint">
-        运行期间请勿切换标签页，注意控制频率。
+        任务会交给后台继续运行，关闭侧栏也不会停止；运行期间请勿切换小红书标签页，注意控制频率。
       </NText>
 
       <div
@@ -308,181 +346,247 @@ async function startRun() {
       </div>
 
       <NForm label-placement="top" size="small" class="growth-collect-form">
-      <NFormItem label="搜索关键词" required>
-        <NInput
-          v-model:value="keyword"
-          placeholder="例如：减脂早餐、露营装备"
-          clearable
-          @keydown.enter.prevent="startRun"
-        />
-      </NFormItem>
-
-      <div class="filter-grid">
-        <NFormItem label="最低点赞">
-          <NInputNumber
-            v-model:value="minLikedCount"
-            :min="0"
-            :step="100"
-            placeholder="0 不限"
-            class="filter-input"
-          />
-        </NFormItem>
-        <NFormItem label="最低收藏">
-          <NInputNumber
-            v-model:value="minCollectedCount"
-            :min="0"
-            :step="100"
-            placeholder="0 不限"
-            class="filter-input"
-          />
-        </NFormItem>
-        <NFormItem label="最低评论">
-          <NInputNumber
-            v-model:value="minCommentCount"
-            :min="0"
-            :step="50"
-            placeholder="0 不限"
-            class="filter-input"
-          />
-        </NFormItem>
-      </div>
-
-      <div class="filter-grid filter-grid--two">
-        <NFormItem>
-          <template #label>
-            <span class="form-label-with-tip">
-              运行时长（分钟）
-              <InfoTip content="到时自动停止；也可随时手动停止" />
-            </span>
-          </template>
-          <NInputNumber
-            v-model:value="durationMinutes"
-            :min="1"
-            :max="480"
-            :step="5"
-            class="filter-input"
-          />
-        </NFormItem>
-        <NFormItem label="每篇最多回复">
-          <NInputNumber
-            v-model:value="maxRepliesPerNote"
-            :min="1"
-            :max="10"
-            :step="1"
-            class="filter-input"
-            :disabled="!enableReply"
-          />
-        </NFormItem>
-      </div>
-
-      <div class="action-section">
-        <NText strong class="action-section-title">互动动作</NText>
-        <NSpace>
-          <NCheckbox v-model:checked="enableComment">发表评论</NCheckbox>
-          <NCheckbox v-model:checked="enableReply">回复评论</NCheckbox>
-        </NSpace>
-      </div>
-
-      <div
-        v-if="enableComment || enableReply"
-        class="risk-disclaimer"
-        role="note"
-      >
-        <p class="risk-disclaimer-recommend">推荐使用 AI 评论 / AI 回复，每条文案更有变化，更不易触发平台风控。</p>
-        <p class="risk-disclaimer-warn">
-          固定评论/回复重复发送相同文案，更容易触发平台风控；相关后果由您自行承担，与本工具及开发者无关。
-        </p>
-      </div>
-
-      <template v-if="enableComment">
-        <NFormItem label="发评论方式">
-          <NRadioGroup v-model:value="commentMode">
-            <NSpace>
-              <NRadio value="ai">AI 评论（推荐）</NRadio>
-              <NRadio value="fixed">固定评论</NRadio>
-            </NSpace>
-          </NRadioGroup>
-        </NFormItem>
-
-        <NFormItem v-if="commentMode === 'ai'">
-          <template #label>
-            <span class="form-label-with-tip">
-              AI 评论提示词
-              <InfoTip
-                :content="`约束 AI 评论风格，需已配置 API Key；${aiQuotaHint}`"
-              />
-            </span>
-          </template>
+        <NFormItem label="搜索关键词" required>
           <NInput
-            v-model:value="aiCommentPrompt"
-            type="textarea"
-            :rows="2"
-            placeholder="例如：结合笔记内容夸赞并引导关注"
+            v-model:value="keyword"
+            placeholder="例如：减脂早餐、露营装备"
+            clearable
+            @keydown.enter.prevent="startRun"
           />
         </NFormItem>
 
-        <NFormItem v-else label="固定评论内容" required>
-          <NInput
-            v-model:value="fixedCommentText"
-            type="textarea"
-            :rows="2"
-            placeholder="每篇笔记下发表相同评论"
-          />
-        </NFormItem>
-      </template>
-
-      <template v-if="enableReply">
-        <NFormItem label="回复评论方式">
-        <NRadioGroup v-model:value="replyMode">
-          <NSpace>
-            <NRadio value="ai">AI 回复（推荐）</NRadio>
-            <NRadio value="fixed">固定回复</NRadio>
-          </NSpace>
-        </NRadioGroup>
-      </NFormItem>
-
-      <NFormItem v-if="replyMode === 'ai'" label="AI 回复提示词" required>
-        <template #label>
-          <span class="form-label-with-tip">
-            AI 回复提示词
-            <InfoTip
-              :content="`约束 AI 回复风格，需已配置 API Key；${aiQuotaHint}`"
+        <div class="filter-grid">
+          <NFormItem label="最低点赞">
+            <NInputNumber
+              v-model:value="minLikedCount"
+              :min="0"
+              :step="100"
+              placeholder="0 不限"
+              class="filter-input"
             />
-          </span>
+          </NFormItem>
+          <NFormItem label="最低收藏">
+            <NInputNumber
+              v-model:value="minCollectedCount"
+              :min="0"
+              :step="100"
+              placeholder="0 不限"
+              class="filter-input"
+            />
+          </NFormItem>
+          <NFormItem label="最低评论">
+            <NInputNumber
+              v-model:value="minCommentCount"
+              :min="0"
+              :step="50"
+              placeholder="0 不限"
+              class="filter-input"
+            />
+          </NFormItem>
+        </div>
+
+        <div class="filter-grid filter-grid--two">
+          <NFormItem>
+            <template #label>
+              <span class="form-label-with-tip">
+                运行时长（分钟）
+                <InfoTip content="到时自动停止；也可随时手动停止" />
+              </span>
+            </template>
+            <NInputNumber
+              v-model:value="durationMinutes"
+              :min="1"
+              :max="480"
+              :step="5"
+              class="filter-input"
+            />
+          </NFormItem>
+          <NFormItem label="每篇最多回复">
+            <NInputNumber
+              v-model:value="maxRepliesPerNote"
+              :min="1"
+              :max="10"
+              :step="1"
+              class="filter-input"
+              :disabled="!enableReply"
+            />
+          </NFormItem>
+        </div>
+
+        <div class="setting-row">
+          <span class="setting-row-label">互动动作</span>
+          <div class="tag-group" role="group" aria-label="互动动作">
+            <button
+              type="button"
+              class="choice-tag"
+              :class="{ 'choice-tag--active': enableComment }"
+              :aria-pressed="enableComment"
+              @click="enableComment = !enableComment"
+            >
+              发表评论
+            </button>
+            <button
+              type="button"
+              class="choice-tag"
+              :class="{ 'choice-tag--active': enableReply }"
+              :aria-pressed="enableReply"
+              @click="enableReply = !enableReply"
+            >
+              回复评论
+            </button>
+          </div>
+        </div>
+
+        <div
+          v-if="enableComment || enableReply"
+          class="risk-disclaimer"
+          role="note"
+        >
+          推荐 AI 文案；固定文案重复发送更容易触发平台风控，后果由您自行承担。
+        </div>
+
+        <template v-if="enableComment">
+          <div class="setting-row setting-row--mode">
+            <span class="setting-row-label">发评论方式</span>
+            <div class="tag-group" role="group" aria-label="发评论方式">
+              <button
+                type="button"
+                class="choice-tag"
+                :class="{ 'choice-tag--active': commentMode === 'ai' }"
+                :aria-pressed="commentMode === 'ai'"
+                @click="commentMode = 'ai'"
+              >
+                AI 评论
+              </button>
+              <button
+                type="button"
+                class="choice-tag"
+                :class="{ 'choice-tag--active': commentMode === 'fixed' }"
+                :aria-pressed="commentMode === 'fixed'"
+                @click="commentMode = 'fixed'"
+              >
+                固定评论
+              </button>
+            </div>
+          </div>
+
+          <NFormItem v-if="commentMode === 'ai'">
+            <template #label>
+              <span class="form-label-with-tip">
+                AI 评论提示词
+                <InfoTip
+                  :content="`约束 AI 评论风格，需已配置 API Key；${aiQuotaHint}`"
+                />
+              </span>
+            </template>
+            <NInput
+              v-model:value="aiCommentPrompt"
+              type="textarea"
+              :autosize="{ minRows: 2, maxRows: 3 }"
+              placeholder="例如：结合笔记内容夸赞并引导关注"
+            />
+          </NFormItem>
+
+          <NFormItem v-else label="固定评论内容" required>
+            <NInput
+              v-model:value="fixedCommentText"
+              type="textarea"
+              :autosize="{ minRows: 2, maxRows: 3 }"
+              placeholder="每篇笔记下发表相同评论"
+            />
+          </NFormItem>
         </template>
-        <NInput
-          v-model:value="aiReplyPrompt"
-          type="textarea"
-          :rows="2"
-          placeholder="例如：用亲切语气回复，引导用户关注并私信领取资料"
-        />
-      </NFormItem>
 
-      <NFormItem v-else label="固定回复内容" required>
-        <NInput
-          v-model:value="fixedReplyText"
-          type="textarea"
-          :rows="2"
-          placeholder="每条评论将发送相同内容"
-        />
-      </NFormItem>
-      </template>
+        <template v-if="enableReply">
+          <div class="setting-row setting-row--mode">
+            <span class="setting-row-label">回复评论方式</span>
+            <div class="tag-group" role="group" aria-label="回复评论方式">
+              <button
+                type="button"
+                class="choice-tag"
+                :class="{ 'choice-tag--active': replyMode === 'ai' }"
+                :aria-pressed="replyMode === 'ai'"
+                @click="replyMode = 'ai'"
+              >
+                AI 回复
+              </button>
+              <button
+                type="button"
+                class="choice-tag"
+                :class="{ 'choice-tag--active': replyMode === 'fixed' }"
+                :aria-pressed="replyMode === 'fixed'"
+                @click="replyMode = 'fixed'"
+              >
+                固定回复
+              </button>
+            </div>
+          </div>
 
+          <NFormItem v-if="replyMode === 'ai'" required class="reply-prompt-item">
+            <template #label>
+              <span class="form-label-with-tip">
+                AI 回复提示词
+                <InfoTip
+                  :content="`约束 AI 回复风格，需已配置 API Key；${aiQuotaHint}`"
+                />
+              </span>
+            </template>
+            <div class="reply-prompt-stack">
+              <div class="reply-template-panel">
+                <span class="reply-template-title">回复模板</span>
+                <div class="reply-template-tags" role="listbox" aria-label="AI 回复模板">
+                  <button
+                    v-for="template in GROWTH_REPLY_PROMPT_TEMPLATES"
+                    :key="template.id"
+                    type="button"
+                    class="reply-template-tag"
+                    :class="{ 'reply-template-tag--active': selectedReplyTemplateId === template.id }"
+                    :aria-selected="selectedReplyTemplateId === template.id"
+                    :title="template.description"
+                    @click="applyReplyTemplate(template.id)"
+                  >
+                    {{ template.name }}
+                  </button>
+                </div>
+                <NText depth="3" class="reply-template-desc">
+                  {{ selectedReplyTemplate.description }}
+                </NText>
+              </div>
+              <NInput
+                v-model:value="aiReplyPrompt"
+                type="textarea"
+                :autosize="{ minRows: 4, maxRows: 6 }"
+                placeholder="例如：用亲切语气回复，引导用户关注并私信领取资料"
+              />
+            </div>
+          </NFormItem>
+
+          <NFormItem v-else label="固定回复内容" required>
+            <NInput
+              v-model:value="fixedReplyText"
+              type="textarea"
+              :autosize="{ minRows: 2, maxRows: 3 }"
+              placeholder="每条评论将发送相同内容"
+            />
+          </NFormItem>
+        </template>
       </NForm>
     </div>
 
-    <template #footer>
-      <div class="dialog-footer">
-        <NButton quaternary @click="resetForm">重置</NButton>
-        <div class="dialog-footer-actions">
-          <NButton @click="close">关闭</NButton>
-          <NButton type="primary" :disabled="aiQuotaBlocked" @click="startRun">
-            开始运行
-          </NButton>
-        </div>
+    <div class="dialog-footer">
+      <NButton quaternary @click="resetForm">重置</NButton>
+      <div class="dialog-footer-actions">
+        <NButton
+          type="primary"
+          :disabled="aiQuotaBlocked || isRunning || !isXhsPage"
+          :loading="isRunning"
+          @click="startRun"
+        >
+          {{ isRunning ? '运行中' : '开始运行' }}
+        </NButton>
       </div>
-    </template>
-  </NModal>
+    </div>
+  </section>
 
   <GrowthRunProgressDialog
     v-model:show="showProgressDialog"
@@ -494,30 +598,34 @@ async function startRun() {
 
 <style scoped>
 .dialog-scroll-body {
-  max-height: min(58vh, 400px);
-  overflow-y: auto;
-  padding-bottom: 4px;
-  margin-right: -4px;
-  padding-right: 4px;
+  padding-bottom: 2px;
 }
 
-.growth-collect-dialog :deep(.n-card__footer) {
-  padding-top: 12px;
+.growth-collect-panel {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  min-height: 0;
+  padding: 10px;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid #eef0f4;
+  box-shadow: 0 1px 2px rgba(29, 33, 41, 0.04);
 }
 
 .growth-collect-form :deep(.n-form-item) {
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .growth-collect-form :deep(.n-form-item-label) {
-  padding-bottom: 4px;
+  padding-bottom: 3px;
 }
 
 .dialog-hint {
   display: block;
   font-size: 11px;
   line-height: 1.45;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .ai-quota-banner {
@@ -525,8 +633,8 @@ async function startRun() {
   flex-wrap: wrap;
   align-items: center;
   gap: 4px 6px;
-  margin-bottom: 10px;
-  padding: 6px 10px;
+  margin-bottom: 8px;
+  padding: 5px 8px;
   border-radius: 8px;
   background: #f0f7ff;
   border: 1px solid #d4e8ff;
@@ -584,37 +692,138 @@ async function startRun() {
   gap: 4px;
 }
 
-.action-section {
+.setting-row {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-bottom: 2px;
+  align-items: stretch;
+  gap: 7px;
+  margin-bottom: 10px;
 }
 
-.action-section-title {
+.setting-row--mode {
+  margin-bottom: 8px;
+}
+
+.setting-row-label {
   font-size: 13px;
-}
-
-.risk-disclaimer {
-  margin: 0 0 12px;
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: #fff1f0;
-  border: 1px solid #ffccc7;
-}
-
-.risk-disclaimer-recommend {
-  margin: 0 0 8px;
-  font-size: 13px;
-  line-height: 1.55;
-  font-weight: 600;
+  line-height: 1.3;
+  font-weight: 700;
   color: #1d2129;
 }
 
-.risk-disclaimer-warn {
-  margin: 0;
+.tag-group {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.reply-template-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.choice-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 34px;
+  min-width: 0;
+  padding: 0 10px;
+  border: 1px solid #e5e6eb;
+  border-radius: 8px;
+  background: #fff;
+  color: #4e5969;
+  font: inherit;
   font-size: 13px;
-  line-height: 1.6;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.reply-template-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  min-width: 0;
+  padding: 0 10px;
+  border: 1px solid #e5e6eb;
+  border-radius: 999px;
+  background: #fff;
+  color: #4e5969;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.choice-tag:hover,
+.reply-template-tag:hover {
+  color: #ff2442;
+  border-color: #ffb3c0;
+  background: #fff5f6;
+}
+
+.choice-tag--active,
+.choice-tag--active:hover,
+.reply-template-tag--active,
+.reply-template-tag--active:hover {
+  color: #ff2442;
+  border-color: #ffccc7;
+  background: #fff1f0;
+}
+
+.reply-prompt-item :deep(.n-form-item-blank) {
+  display: block;
+}
+
+.reply-prompt-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.reply-template-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding: 8px;
+  border-radius: 8px;
+  background: #f7f8fa;
+  border: 1px solid #eef0f4;
+}
+
+.reply-template-title {
+  font-size: 12px;
+  line-height: 1.2;
+  font-weight: 700;
+  color: #1d2129;
+}
+
+.reply-template-desc {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.risk-disclaimer {
+  margin: 0 0 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: #fff1f0;
+  border: 1px solid #ffccc7;
+  font-size: 11px;
+  line-height: 1.45;
   color: #f53f3f;
 }
 
@@ -624,6 +833,8 @@ async function startRun() {
   justify-content: space-between;
   gap: 8px;
   width: 100%;
+  padding-top: 8px;
+  border-top: 1px solid #f2f3f5;
 }
 
 .dialog-footer-actions {

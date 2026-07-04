@@ -25,7 +25,7 @@ const isFinished = computed(
 )
 
 const title = computed(() => {
-  if (props.isRunning) return '获客运行中'
+  if (props.isRunning) return '垂直养号运行中'
   if (props.progress?.phase === 'error') return '运行失败'
   if (props.progress?.phase === 'cancelled') return '已停止'
   return '运行完成'

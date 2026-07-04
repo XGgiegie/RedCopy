@@ -2,15 +2,31 @@ import { injectExtractNote, isXhsNoteUrl } from '../shared/extract-note'
 import { logExtractContentJson } from '../shared/extract-log'
 import { formatNoteAsMarkdown } from '../shared/export-markdown'
 import {
+  BACKGROUND_KEEPALIVE_MESSAGE,
+  GET_ANALYZE_GENERATE_TASK_STATUSES_MESSAGE,
+  GET_ANALYZE_GENERATE_TASK_STATUS_MESSAGE,
+  GET_AUTO_COLLECT_TASK_STATUS_MESSAGE,
+  GET_GROWTH_ACQUIRE_TASK_STATUS_MESSAGE,
   DOWNLOAD_NOTE_IMAGE_MESSAGE,
   DOWNLOAD_NOTE_MEDIA_MESSAGE,
   EXTRACT_NOTE_MESSAGE,
   EXPORT_CURRENT_NOTE_MARKDOWN_MESSAGE,
   IMAGE_TO_DATA_URL_MESSAGE,
   INJECT_DETAIL_EXPORT_BUTTON_MESSAGE,
+  START_ANALYZE_GENERATE_TASK_MESSAGE,
+  START_AUTO_COLLECT_TASK_MESSAGE,
+  START_GROWTH_ACQUIRE_TASK_MESSAGE,
   STORAGE_GET_MESSAGE,
   STORAGE_REMOVE_MESSAGE,
   STORAGE_SET_MESSAGE,
+  STOP_AUTO_COLLECT_TASK_MESSAGE,
+  STOP_GROWTH_ACQUIRE_TASK_MESSAGE,
+  type AnalyzeGenerateTaskResponse,
+  type AnalyzeGenerateTaskStatus,
+  type AnalyzeGenerateTaskStatusesResponse,
+  type AnalyzeGenerateMode,
+  type AutoCollectTaskResponse,
+  type BackgroundTaskStatus,
   type DownloadNoteImageRequest,
   type DownloadNoteImageResponse,
   type DownloadNoteMediaRequest,
@@ -19,6 +35,7 @@ import {
   type ExportCurrentNoteMarkdownResponse,
   type ImageToDataUrlResponse,
   type InjectDetailExportButtonResponse,
+  type GrowthAcquireTaskResponse,
   type StorageGetResponse,
   type StorageRemoveResponse,
   type StorageSetResponse,
@@ -26,6 +43,38 @@ import {
 import { downloadNoteImage, downloadNoteMedia, downloadTextFile } from '../shared/note-media'
 import type { NoteExtractResult } from '../shared/note-types'
 import { migratePlainStorageToEncrypted } from '../shared/storage'
+import { isProPlan, loadAiSettings } from '../shared/ai-settings'
+import { resolveAnalysisImageDataUrls } from '../shared/analysis-image'
+import { requestNoteAnalysis } from '../shared/analyze-note'
+import type { CreationPurposeKey } from '../shared/creation-intent'
+import {
+  requestDoubaoDirectGenerate,
+  requestDoubaoGenerate,
+} from '../shared/doubao-generate'
+import { normalizeGeneratedDraft } from '../shared/parse-generated-draft'
+import {
+  requestProDirectGenerate,
+  requestProGenerate,
+} from '../shared/pro-generate'
+import { getTask, updateTask } from '../shared/task-db'
+import type {
+  AutoCollectConfig,
+  AutoCollectProgress,
+  AutoCollectResult,
+} from '../shared/auto-collect'
+import type {
+  GrowthAcquireConfig,
+  GrowthAcquireProgress,
+  GrowthAcquireResult,
+} from '../shared/growth-acquire'
+import {
+  AutoCollectCancelledError,
+  runAutoCollect,
+} from '../popup/services/auto-collect-runner'
+import {
+  GrowthAcquireCancelledError,
+  runGrowthAcquire,
+} from '../popup/services/growth-acquire-runner'
 
 console.info('[RedCopy] background ready')
 
@@ -45,6 +94,455 @@ interface CapturedVideoRequest {
 }
 
 const capturedVideoRequestsByTab = new Map<number, CapturedVideoRequest[]>()
+const OFFSCREEN_DOCUMENT_PATH = 'offscreen.html'
+let isEnsuringOffscreen = false
+
+function hasRunningBackgroundTask(): boolean {
+  return (
+    autoCollectTask.running ||
+    growthAcquireTask.running ||
+    [...analyzeGenerateTasks.values()].some((task) => task.running)
+  )
+}
+
+async function hasOffscreenDocument(): Promise<boolean> {
+  if (!chrome.offscreen?.hasDocument) return false
+  return chrome.offscreen.hasDocument()
+}
+
+async function ensureOffscreenDocument() {
+  if (!chrome.offscreen?.createDocument || isEnsuringOffscreen) return
+  if (await hasOffscreenDocument()) return
+
+  isEnsuringOffscreen = true
+  try {
+    await chrome.offscreen.createDocument({
+      url: OFFSCREEN_DOCUMENT_PATH,
+      reasons: [chrome.offscreen.Reason.WORKERS],
+      justification: 'Keep long-running user-started collection tasks alive after the side panel closes.',
+    })
+    console.info('[RedCopy] 后台保活文档已创建')
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    if (!detail.includes('Only a single offscreen document')) {
+      console.warn('[RedCopy] 创建后台保活文档失败', detail, error)
+    }
+  } finally {
+    isEnsuringOffscreen = false
+  }
+}
+
+async function closeOffscreenDocumentIfIdle() {
+  if (hasRunningBackgroundTask()) return
+  if (!chrome.offscreen?.closeDocument) return
+  if (!(await hasOffscreenDocument())) return
+
+  try {
+    await chrome.offscreen.closeDocument()
+    console.info('[RedCopy] 后台保活文档已关闭')
+  } catch (error) {
+    console.warn('[RedCopy] 关闭后台保活文档失败', error)
+  }
+}
+
+function createIdleTaskStatus<TProgress, TResult>():
+  BackgroundTaskStatus<TProgress, TResult> {
+  return {
+    running: false,
+    cancelled: false,
+    progress: null,
+    result: null,
+    error: null,
+    startedAt: null,
+    finishedAt: null,
+  }
+}
+
+const autoCollectTask =
+  createIdleTaskStatus<AutoCollectProgress, AutoCollectResult>()
+const growthAcquireTask =
+  createIdleTaskStatus<GrowthAcquireProgress, GrowthAcquireResult>()
+const analyzeGenerateTasks = new Map<string, AnalyzeGenerateTaskStatus>()
+
+function cloneTaskStatus<TProgress, TResult>(
+  status: BackgroundTaskStatus<TProgress, TResult>,
+): BackgroundTaskStatus<TProgress, TResult> {
+  return { ...status }
+}
+
+function beginTask<TProgress, TResult>(
+  status: BackgroundTaskStatus<TProgress, TResult>,
+) {
+  status.running = true
+  status.cancelled = false
+  status.result = null
+  status.error = null
+  status.startedAt = Date.now()
+  status.finishedAt = null
+}
+
+function finishTask<TProgress, TResult>(
+  status: BackgroundTaskStatus<TProgress, TResult>,
+  result: TResult,
+) {
+  status.running = false
+  status.result = result
+  status.error = null
+  status.finishedAt = Date.now()
+}
+
+function failTask<TProgress, TResult>(
+  status: BackgroundTaskStatus<TProgress, TResult>,
+  error: unknown,
+) {
+  const detail = error instanceof Error ? error.message : String(error)
+  status.running = false
+  status.error = detail
+  status.finishedAt = Date.now()
+}
+
+function startAutoCollectTask(
+  config: AutoCollectConfig,
+): AutoCollectTaskResponse {
+  if (autoCollectTask.running) {
+    return { ok: false, error: '自动采集正在运行中' }
+  }
+
+  beginTask(autoCollectTask)
+  void ensureOffscreenDocument()
+  autoCollectTask.progress = {
+    phase: 'navigating',
+    message: '准备开始…',
+    scanned: 0,
+    extracted: 0,
+    skipped: 0,
+  }
+
+  void runAutoCollect(config, {
+    onProgress: (progress) => {
+      autoCollectTask.progress = progress
+    },
+    isCancelled: () => autoCollectTask.cancelled,
+  })
+    .then((result) => {
+      finishTask(autoCollectTask, result)
+      void closeOffscreenDocumentIfIdle()
+    })
+    .catch((error: unknown) => {
+      if (error instanceof AutoCollectCancelledError) {
+        finishTask(autoCollectTask, {
+          extracted: autoCollectTask.progress?.extracted ?? 0,
+          skipped: autoCollectTask.progress?.skipped ?? 0,
+          scanned: autoCollectTask.progress?.scanned ?? 0,
+        })
+        void closeOffscreenDocumentIfIdle()
+        return
+      }
+      console.error('[RedCopy] 后台自动采集失败', error)
+      failTask(autoCollectTask, error)
+      autoCollectTask.progress = {
+        phase: 'error',
+        message: error instanceof Error ? error.message : String(error),
+        scanned: autoCollectTask.progress?.scanned ?? 0,
+        extracted: autoCollectTask.progress?.extracted ?? 0,
+        skipped: autoCollectTask.progress?.skipped ?? 0,
+      }
+      void closeOffscreenDocumentIfIdle()
+    })
+
+  return {
+    ok: true,
+    status: cloneTaskStatus(autoCollectTask),
+  }
+}
+
+function stopAutoCollectTask(): AutoCollectTaskResponse {
+  if (autoCollectTask.running) {
+    autoCollectTask.cancelled = true
+    autoCollectTask.progress = {
+      phase: 'cancelled',
+      message: '正在取消…',
+      scanned: autoCollectTask.progress?.scanned ?? 0,
+      extracted: autoCollectTask.progress?.extracted ?? 0,
+      skipped: autoCollectTask.progress?.skipped ?? 0,
+    }
+  }
+  return { ok: true, status: cloneTaskStatus(autoCollectTask) }
+}
+
+function startGrowthAcquireTask(
+  config: GrowthAcquireConfig,
+): GrowthAcquireTaskResponse {
+  if (growthAcquireTask.running) {
+    return { ok: false, error: '自动垂直养号正在运行中' }
+  }
+
+  beginTask(growthAcquireTask)
+  void ensureOffscreenDocument()
+  growthAcquireTask.progress = {
+    phase: 'navigating',
+    message: '准备开始…',
+    scanned: 0,
+    skipped: 0,
+    replied: 0,
+    commented: 0,
+    aiUsed: 0,
+    remainingSec: Math.min(Math.max(config.durationMinutes || 30, 1), 480) * 60,
+  }
+
+  void runGrowthAcquire(config, {
+    onProgress: (progress) => {
+      growthAcquireTask.progress = progress
+    },
+    isCancelled: () => growthAcquireTask.cancelled,
+  })
+    .then((result) => {
+      finishTask(growthAcquireTask, result)
+      void closeOffscreenDocumentIfIdle()
+    })
+    .catch((error: unknown) => {
+      if (error instanceof GrowthAcquireCancelledError) {
+        finishTask(growthAcquireTask, {
+          skipped: growthAcquireTask.progress?.skipped ?? 0,
+          scanned: growthAcquireTask.progress?.scanned ?? 0,
+          replied: growthAcquireTask.progress?.replied ?? 0,
+          commented: growthAcquireTask.progress?.commented ?? 0,
+          ranMs:
+            growthAcquireTask.startedAt == null
+              ? 0
+              : Date.now() - growthAcquireTask.startedAt,
+        })
+        void closeOffscreenDocumentIfIdle()
+        return
+      }
+      console.error('[RedCopy] 后台自动垂直养号失败', error)
+      failTask(growthAcquireTask, error)
+      growthAcquireTask.progress = {
+        phase: 'error',
+        message: error instanceof Error ? error.message : String(error),
+        scanned: growthAcquireTask.progress?.scanned ?? 0,
+        skipped: growthAcquireTask.progress?.skipped ?? 0,
+        replied: growthAcquireTask.progress?.replied ?? 0,
+        commented: growthAcquireTask.progress?.commented ?? 0,
+        aiUsed: growthAcquireTask.progress?.aiUsed ?? 0,
+        aiUnlimited: growthAcquireTask.progress?.aiUnlimited,
+        remainingSec: growthAcquireTask.progress?.remainingSec ?? 0,
+      }
+      void closeOffscreenDocumentIfIdle()
+    })
+
+  return {
+    ok: true,
+    status: cloneTaskStatus(growthAcquireTask),
+  }
+}
+
+function stopGrowthAcquireTask(): GrowthAcquireTaskResponse {
+  if (growthAcquireTask.running) {
+    growthAcquireTask.cancelled = true
+    growthAcquireTask.progress = {
+      phase: 'cancelled',
+      message: '正在停止…',
+      scanned: growthAcquireTask.progress?.scanned ?? 0,
+      skipped: growthAcquireTask.progress?.skipped ?? 0,
+      replied: growthAcquireTask.progress?.replied ?? 0,
+      commented: growthAcquireTask.progress?.commented ?? 0,
+      aiUsed: growthAcquireTask.progress?.aiUsed ?? 0,
+      aiUnlimited: growthAcquireTask.progress?.aiUnlimited,
+      remainingSec: growthAcquireTask.progress?.remainingSec ?? 0,
+    }
+  }
+  return { ok: true, status: cloneTaskStatus(growthAcquireTask) }
+}
+
+function getAnalyzeGenerateTaskStatus(taskId: string): AnalyzeGenerateTaskStatus {
+  return analyzeGenerateTasks.get(taskId) ?? createIdleTaskStatus()
+}
+
+function setAnalyzeGenerateProgress(
+  status: AnalyzeGenerateTaskStatus,
+  taskId: string,
+  phase: NonNullable<AnalyzeGenerateTaskStatus['progress']>['phase'],
+  message: string,
+  mode?: AnalyzeGenerateMode,
+) {
+  status.progress = { taskId, phase, message, mode }
+}
+
+function cloneAnalyzeGenerateStatuses():
+  Record<string, AnalyzeGenerateTaskStatus> {
+  return Object.fromEntries(
+    [...analyzeGenerateTasks.entries()].map(([taskId, status]) => [
+      taskId,
+      cloneTaskStatus(status),
+    ]),
+  )
+}
+
+async function runAnalyzeGenerateTask(payload: {
+  taskId: string
+  mode?: AnalyzeGenerateMode
+  purpose?: CreationPurposeKey
+  topic?: string
+  imageUrls?: string[]
+}) {
+  const { taskId, purpose, topic = '', imageUrls, mode = 'note_analysis' } = payload
+  const status = analyzeGenerateTasks.get(taskId)
+  if (!status) return
+
+  try {
+    const task = await getTask(taskId)
+    if (!task) throw new Error('任务已不存在')
+
+    const settings = await loadAiSettings()
+    if (mode === 'direct') {
+      const trimmedTopic = topic.trim()
+      if (!purpose) throw new Error('请先选择创作目的')
+      if (!trimmedTopic) throw new Error('请先填写明确主题或卖点')
+
+      setAnalyzeGenerateProgress(status, taskId, 'generating', '正在直接创作…', mode)
+      const draft = isProPlan(settings)
+        ? await requestProDirectGenerate({ purpose, topic: trimmedTopic }, settings)
+        : await requestDoubaoDirectGenerate({ purpose, topic: trimmedTopic }, settings)
+      const normalized = normalizeGeneratedDraft(draft)
+      const generatedAt = Date.now()
+
+      const generated = await updateTask(taskId, {
+        draft: normalized,
+        generatedAt,
+        generatePurpose: purpose,
+        generateTopic: trimmedTopic,
+      })
+      if (!generated) throw new Error('任务已不存在')
+
+      setAnalyzeGenerateProgress(status, taskId, 'complete', '创作已完成', mode)
+      finishTask(status, {
+        taskId,
+        draft: normalized,
+        generatedAt,
+      })
+      return
+    }
+
+    if (!task.note) throw new Error('当前任务无笔记内容')
+
+    const analysisImageUrls = await resolveAnalysisImageDataUrls(imageUrls)
+    setAnalyzeGenerateProgress(
+      status,
+      taskId,
+      'analyzing',
+      analysisImageUrls?.length ? '正在理解笔记和配图…' : '正在理解笔记结构…',
+      mode,
+    )
+    const analysis = await requestNoteAnalysis(
+      {
+        noteId: task.noteId,
+        url: task.url,
+        text: task.note,
+        imageUrls: analysisImageUrls,
+      },
+      settings,
+    )
+
+    const analyzed = await updateTask(taskId, {
+      analysis,
+      analyzedAt: Date.now(),
+    })
+    if (!analyzed) throw new Error('任务已不存在')
+
+    setAnalyzeGenerateProgress(status, taskId, 'generating', '正在生成创作草稿…', mode)
+    const draft = isProPlan(settings)
+      ? await requestProGenerate(
+          {
+            noteId: analyzed.noteId,
+            url: analyzed.url,
+            text: analyzed.note,
+            analysis,
+            purpose,
+            topic,
+          },
+          settings,
+        )
+      : await requestDoubaoGenerate(
+          {
+            noteId: analyzed.noteId,
+            url: analyzed.url,
+            text: analyzed.note,
+            analysis,
+            purpose,
+            topic,
+          },
+          settings,
+        )
+    const normalized = normalizeGeneratedDraft(draft)
+    const generatedAt = Date.now()
+
+    const generated = await updateTask(taskId, {
+      draft: normalized,
+      generatedAt,
+      generatePurpose: purpose ?? null,
+      generateTopic: topic,
+    })
+    if (!generated) throw new Error('任务已不存在')
+
+    setAnalyzeGenerateProgress(status, taskId, 'complete', '创作草稿已生成', mode)
+    finishTask(status, {
+      taskId,
+      draft: normalized,
+      generatedAt,
+    })
+  } catch (error) {
+    console.error('[RedCopy] 后台创作任务失败', { taskId, mode }, error)
+    failTask(status, error)
+    setAnalyzeGenerateProgress(
+      status,
+      taskId,
+      'error',
+      error instanceof Error ? error.message : String(error),
+      mode,
+    )
+  } finally {
+    void closeOffscreenDocumentIfIdle()
+  }
+}
+
+async function startAnalyzeGenerateTask(payload: {
+  taskId: string
+  mode?: AnalyzeGenerateMode
+  purpose?: CreationPurposeKey
+  topic?: string
+  imageUrls?: string[]
+}): Promise<AnalyzeGenerateTaskResponse> {
+  const taskId = payload.taskId.trim()
+  const mode = payload.mode ?? 'note_analysis'
+  if (!taskId) return { ok: false, error: '缺少任务 id' }
+
+  const current = analyzeGenerateTasks.get(taskId)
+  if (current?.running) {
+    return { ok: false, error: '创作任务正在运行中' }
+  }
+
+  const task = await getTask(taskId)
+  if (!task) return { ok: false, error: '任务已不存在' }
+
+  const status = createIdleTaskStatus<
+    NonNullable<AnalyzeGenerateTaskStatus['progress']>,
+    NonNullable<AnalyzeGenerateTaskStatus['result']>
+  >()
+  beginTask(status)
+  setAnalyzeGenerateProgress(
+    status,
+    taskId,
+    mode === 'direct' ? 'generating' : 'analyzing',
+    '准备开始…',
+    mode,
+  )
+  analyzeGenerateTasks.set(taskId, status)
+  void ensureOffscreenDocument()
+  void runAnalyzeGenerateTask({ ...payload, taskId, mode })
+
+  return { ok: true, status: cloneTaskStatus(status) }
+}
 
 void migratePlainStorageToEncrypted().catch((error: unknown) => {
   console.error('[RedCopy] 启动时存储加密迁移失败', error)
@@ -818,6 +1316,93 @@ async function imageUrlToDataUrl(url: string): Promise<{ dataUrl: string; mimeTy
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type === BACKGROUND_KEEPALIVE_MESSAGE) {
+    sendResponse({ ok: true })
+    if (!hasRunningBackgroundTask()) void closeOffscreenDocumentIfIdle()
+    return false
+  }
+
+  if (message?.type === START_ANALYZE_GENERATE_TASK_MESSAGE) {
+    startAnalyzeGenerateTask({
+      taskId: String(message.taskId ?? ''),
+      mode: message.mode === 'direct' ? 'direct' : 'note_analysis',
+      topic: typeof message.topic === 'string' ? message.topic : '',
+      imageUrls: Array.isArray(message.imageUrls)
+        ? message.imageUrls.map(String)
+        : undefined,
+    })
+      .then((response) => sendResponse(response))
+      .catch((error: unknown) => {
+        const detail = error instanceof Error ? error.message : String(error)
+        sendResponse({ ok: false, error: detail } satisfies AnalyzeGenerateTaskResponse)
+      })
+    return true
+  }
+
+  if (message?.type === GET_ANALYZE_GENERATE_TASK_STATUS_MESSAGE) {
+    sendResponse({
+      ok: true,
+      status: cloneTaskStatus(
+        getAnalyzeGenerateTaskStatus(String(message.taskId ?? '')),
+      ),
+    } satisfies AnalyzeGenerateTaskResponse)
+    return false
+  }
+
+  if (message?.type === GET_ANALYZE_GENERATE_TASK_STATUSES_MESSAGE) {
+    sendResponse({
+      ok: true,
+      statuses: cloneAnalyzeGenerateStatuses(),
+    } satisfies AnalyzeGenerateTaskStatusesResponse)
+    return false
+  }
+
+  if (message?.type === START_AUTO_COLLECT_TASK_MESSAGE) {
+    try {
+      sendResponse(startAutoCollectTask(message.config as AutoCollectConfig))
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      sendResponse({ ok: false, error: detail } satisfies AutoCollectTaskResponse)
+    }
+    return false
+  }
+
+  if (message?.type === STOP_AUTO_COLLECT_TASK_MESSAGE) {
+    sendResponse(stopAutoCollectTask())
+    return false
+  }
+
+  if (message?.type === GET_AUTO_COLLECT_TASK_STATUS_MESSAGE) {
+    sendResponse({
+      ok: true,
+      status: cloneTaskStatus(autoCollectTask),
+    } satisfies AutoCollectTaskResponse)
+    return false
+  }
+
+  if (message?.type === START_GROWTH_ACQUIRE_TASK_MESSAGE) {
+    try {
+      sendResponse(startGrowthAcquireTask(message.config as GrowthAcquireConfig))
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      sendResponse({ ok: false, error: detail } satisfies GrowthAcquireTaskResponse)
+    }
+    return false
+  }
+
+  if (message?.type === STOP_GROWTH_ACQUIRE_TASK_MESSAGE) {
+    sendResponse(stopGrowthAcquireTask())
+    return false
+  }
+
+  if (message?.type === GET_GROWTH_ACQUIRE_TASK_STATUS_MESSAGE) {
+    sendResponse({
+      ok: true,
+      status: cloneTaskStatus(growthAcquireTask),
+    } satisfies GrowthAcquireTaskResponse)
+    return false
+  }
+
   // 存储代理：供 dev 模式下 chrome.storage 不可用的扩展页使用
   if (message?.type === STORAGE_GET_MESSAGE) {
     chrome.storage.local

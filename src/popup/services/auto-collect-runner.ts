@@ -14,8 +14,8 @@ import {
 } from '../../shared/auto-collect'
 import { parseEngagementCount, passesEngagementFilter } from '../../shared/engagement-count'
 import { logExtractContentJson } from '../../shared/extract-log'
+import { injectExtractNote } from '../../shared/extract-note'
 import { createTask, listTasks } from '../../shared/task-db'
-import { extractNoteFromTab } from './extract-note'
 
 export class AutoCollectCancelledError extends Error {
   constructor() {
@@ -38,7 +38,7 @@ function sleep(ms: number): Promise<void> {
 
 function waitForTabComplete(tabId: number, timeoutMs = 20000): Promise<void> {
   return new Promise((resolve, reject) => {
-    const timer = window.setTimeout(() => {
+    const timer = globalThis.setTimeout(() => {
       chrome.tabs.onUpdated.removeListener(listener)
       reject(new Error('页面加载超时，请确认网络正常后重试'))
     }, timeoutMs)
@@ -48,7 +48,7 @@ function waitForTabComplete(tabId: number, timeoutMs = 20000): Promise<void> {
       changeInfo,
     ) => {
       if (updatedTabId !== tabId || changeInfo.status !== 'complete') return
-      window.clearTimeout(timer)
+      globalThis.clearTimeout(timer)
       chrome.tabs.onUpdated.removeListener(listener)
       resolve()
     }
@@ -78,6 +78,10 @@ async function executeInTab<T, A extends unknown[]>(
   }
 
   return result.result as T
+}
+
+async function extractNoteDirectlyFromTab(tabId: number) {
+  return executeInTab(tabId, injectExtractNote, [{ includeDom: false }])
 }
 
 function assertNotCancelled(isCancelled: () => boolean) {
@@ -159,7 +163,7 @@ async function processOneCard(
     progressBase,
   )
 
-  const extract = await extractNoteFromTab(tabId, { includeDom: false })
+  const extract = await extractNoteDirectlyFromTab(tabId)
   logExtractContentJson(extract, '[RedCopy][自动采集]')
 
   let outcome: CardOutcome = 'skipped-extract'

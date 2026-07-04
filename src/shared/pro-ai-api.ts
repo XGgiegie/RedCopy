@@ -11,7 +11,7 @@ export const PRO_APP_CODE = 'DZZL3825'
 /** 保存 Pro Key 时用于探活的轻量模型（非业务主力模型） */
 export const PRO_VALIDATE_MODEL = 'deepseek-v4-flash'
 
-/** Pro 版涨粉自动获客中 AI 评论 / AI 回复使用的轻量模型 */
+/** Pro 版自动垂直养号中 AI 评论 / AI 回复使用的轻量模型 */
 export const PRO_GROWTH_COMMENT_MODEL = 'deepseek-v4-flash'
 
 /** Pro 版文本主力模型 */
@@ -29,8 +29,8 @@ export const PRO_CAPABILITY_SUMMARY = {
   textModel: PRO_TEXT_MODEL,
   growthCommentModel: PRO_GROWTH_COMMENT_MODEL,
   imageModels: [...PRO_IMAGE_MODELS],
-  supports: ['文本分析', '配图识别', '生成类似笔记', 'AI 配图生成', '无限 AI 评论', '无限 AI 回复'],
-  growthBenefit: '涨粉自动获客中的 AI 评论与 AI 回复不限次数',
+  supports: ['文本分析', '配图识别', '生成创作草稿', 'AI 配图生成', '无限 AI 评论', '无限 AI 回复'],
+  growthBenefit: '自动垂直养号中的 AI 评论与 AI 回复不限次数',
   note: '免费版与 Pro 版只能二选一；保存 Pro Key 时会自动验证有效性。',
 } as const
 

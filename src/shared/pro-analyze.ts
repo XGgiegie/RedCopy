@@ -1,7 +1,7 @@
 import type { AiAnalysisResult } from './ai-types'
 import { isProPlan, loadAiSettings, type AiSettings } from './ai-settings'
 import {
-  ANALYSIS_SYSTEM_PROMPT,
+  
   buildAnalysisUserPrompt,
   parseAnalysisContent,
   type AnalyzeNotePayload,
@@ -28,7 +28,7 @@ export async function requestProAnalysis(
   })
 
   const content = await requestProChatCompletion(
-    ANALYSIS_SYSTEM_PROMPT,
+    (await (await import('./prompts')).loadPrompts()).analysis,
     userPrompt,
     {
       settings: resolved,
