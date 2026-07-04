@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { NButton, NSelect, NText, NTooltip } from 'naive-ui'
-import type { DoubaoModel } from '../../../shared/ai-settings'
+import { NButton, NText, NTooltip } from 'naive-ui'
 import { DOUBAO_MODEL_OPTIONS } from '../../../shared/ai-settings'
 import { PRO_TEXT_MODEL } from '../../../shared/pro-ai-api'
 import type { ContentView } from '../../types/content-view'
@@ -16,19 +15,13 @@ const props = defineProps<{
   isGenerating: boolean
   isAiConfigured: boolean
   isGenerateReady: boolean
-  model: DoubaoModel
   isProPlan: boolean
 }>()
 
 const emit = defineEmits<{
   generate: []
-  'update:model': [value: DoubaoModel]
   openSettings: []
 }>()
-
-const modelSelectOptions = computed(() =>
-  DOUBAO_MODEL_OPTIONS.map((item) => ({ label: item.label, value: item.value })),
-)
 
 const selectedModelDescription = computed(
   () =>
@@ -36,16 +29,18 @@ const selectedModelDescription = computed(
       ? props.isDirectCreation
         ? 'Pro 文本模型，直接生成创作草稿；生成会在后台继续'
         : 'Pro 图文模型，生成前会先理解笔记结构；生成会在后台继续'
-      : DOUBAO_MODEL_OPTIONS.find((item) => item.value === props.model)?.description ?? '',
+      : DOUBAO_MODEL_OPTIONS[0].description,
 )
 
 const modelTip = computed(() => props.isProPlan
   ? `Pro 创作使用 ${PRO_TEXT_MODEL}，请求会等待更长时间以提升稳定性；生成已支持后台运行。`
   : props.isDirectCreation
-    ? '豆包大模型会根据主题直接生成创作草稿；生成已支持后台运行。'
-    : '豆包大模型均支持配图识图，请在笔记预览中勾选图片参与生成；生成已支持后台运行。')
+    ? '豆包 Doubao-Seed-2.1 Pro 会根据主题直接生成创作草稿；生成已支持后台运行。'
+    : '豆包 Doubao-Seed-2.1 Pro 支持配图识图，请在笔记预览中勾选图片参与生成；生成已支持后台运行。')
 
-const activeModelLabel = computed(() => (props.isProPlan ? PRO_TEXT_MODEL : ''))
+const activeModelLabel = computed(() =>
+  props.isProPlan ? PRO_TEXT_MODEL : DOUBAO_MODEL_OPTIONS[0].label,
+)
 
 const showPrimaryAction = computed(() =>
   props.isDirectCreation || props.contentView === 'note',
@@ -82,21 +77,10 @@ function handlePrimaryClick() {
 
 <template>
   <div class="analyze-bar">
-    <div v-if="isProPlan" class="model-row">
-      <div class="pro-model-pill">
+    <div class="model-row">
+      <div class="model-pill">
         {{ activeModelLabel }}
       </div>
-      <InfoTip :content="modelTip" placement="bottom" />
-    </div>
-
-    <div v-else class="model-row">
-      <NSelect
-        :value="model"
-        :options="modelSelectOptions"
-        size="small"
-        class="model-select"
-        @update:value="emit('update:model', $event)"
-      />
       <InfoTip :content="modelTip" placement="bottom" />
     </div>
 
@@ -149,12 +133,7 @@ function handlePrimaryClick() {
   gap: 6px;
 }
 
-.model-select {
-  flex: 1;
-  min-width: 0;
-}
-
-.pro-model-pill {
+.model-pill {
   flex: 1;
   min-width: 0;
   height: 28px;

@@ -156,7 +156,7 @@ onMounted(() => {
       <NText strong class="usage-notice-title">使用说明</NText>
       <ul class="usage-notice-list">
         <li>
-          <strong>免费版</strong>与 <strong>Pro 版</strong>只能二选一，保存时会自动切换并清空另一方案的 Key。
+          <strong>Pro 版</strong>与 <strong>免费版</strong>只能二选一，保存时会自动切换并清空另一方案的 Key。
         </li>
         <li v-if="isFreePlan">
           火山方舟豆包提供<strong>免费额度</strong>，本扩展不代扣费用；请自行
@@ -185,8 +185,8 @@ onMounted(() => {
     <section class="plan-section">
       <NText strong class="section-title">选择方案</NText>
       <NRadioGroup v-model:value="plan" size="small" class="plan-radio-group">
-        <NRadioButton value="free">免费版</NRadioButton>
         <NRadioButton value="pro">Pro 版</NRadioButton>
+        <NRadioButton value="free">免费版</NRadioButton>
       </NRadioGroup>
     </section>
 
@@ -210,8 +210,7 @@ onMounted(() => {
           </NTag>
         </div>
         <NText depth="3" class="model-list">
-          {{ DOUBAO_CAPABILITY_SUMMARY.modelHint }}：
-          {{ DOUBAO_MODEL_OPTIONS.map((m) => m.label).join('、') }}
+          {{ DOUBAO_CAPABILITY_SUMMARY.modelHint }}：{{ DOUBAO_MODEL_OPTIONS[0].label }}
         </NText>
         <NText depth="3" class="provider-note">
           {{ DOUBAO_CAPABILITY_SUMMARY.note }}
@@ -335,6 +334,22 @@ onMounted(() => {
         返回
       </NButton>
     </NSpace>
+
+    <section class="prompts-entry">
+      <div class="prompts-entry-inner">
+        <div class="prompts-entry-info">
+          <span class="prompts-entry-title">AI 提示词</span>
+          <span class="prompts-entry-desc">自定义分析、生成、评论回复等场景的系统提示词</span>
+        </div>
+        <button
+          type="button"
+          class="prompts-entry-btn"
+          @click="$router.push('/prompts')"
+        >
+          编辑 →
+        </button>
+      </div>
+    </section>
   </NSpace>
 </template>
 
@@ -495,5 +510,56 @@ onMounted(() => {
 
 .settings-actions {
   width: 100%;
+}
+
+.prompts-entry {
+  padding: 10px 12px;
+  background: #f7f8fa;
+  border: 1px solid #eef0f4;
+  border-radius: 8px;
+}
+
+.prompts-entry-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.prompts-entry-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.prompts-entry-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1d2129;
+}
+
+.prompts-entry-desc {
+  font-size: 11px;
+  color: #86909c;
+  line-height: 1.4;
+}
+
+.prompts-entry-btn {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border: 1px solid #e5e6eb;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  color: #4e5969;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.prompts-entry-btn:hover {
+  color: #ff2442;
+  border-color: #ff2442;
 }
 </style>

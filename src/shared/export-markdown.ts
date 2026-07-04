@@ -3,6 +3,7 @@ import type {
   GeneratedImageRecord,
   GeneratedNoteDraft,
 } from './ai-types'
+import { getCreationPurposeLabel } from './creation-intent'
 import type { NoteTextInfo } from './note-types'
 import type { Task } from './task-db'
 
@@ -237,9 +238,18 @@ export function formatImageHistoryAsMarkdown(
 /** 将单条任务（笔记 + 创作草稿 + 配图历史）格式化为 Markdown */
 export function formatTaskAsMarkdown(task: Task): string {
   const isDirectCreation = task.creationMode === 'direct'
+  const purposeLabel = getCreationPurposeLabel(task.generatePurpose)
   const blocks: string[] = isDirectCreation
     ? []
     : [formatNoteAsMarkdown(task.note, { url: task.url, noteId: task.noteId })]
+
+  if (purposeLabel) {
+    blocks.push('', `创作目的：${purposeLabel}`)
+  }
+
+  if (task.generateTopic) {
+    blocks.push('', `创作主题：${task.generateTopic}`)
+  }
 
   if (task.draft) {
     blocks.push(
@@ -250,7 +260,6 @@ export function formatTaskAsMarkdown(task: Task): string {
     )
   } else if (isDirectCreation && task.generateTopic) {
     blocks.push(`# ${task.note.title?.trim() || '直接创作'}`, '')
-    blocks.push(`创作主题：${task.generateTopic}`)
   }
   if (task.imageHistory?.length) {
     blocks.push('', '## 配图历史', '', formatImageHistoryAsMarkdown(task.imageHistory))

@@ -2,10 +2,11 @@
 export const APP_NAME = '薯薯小抄'
 export const APP_TAGLINE = '小红书 AI 创作小助手'
 
-/** 侧栏两大独立模块 */
+/** 侧栏独立模块 */
 export const MODULE_CREATION = '创作'
 export const MODULE_ANALYSIS = MODULE_CREATION
 export const MODULE_GROWTH = '自动垂直养号'
+
 export const APP_DESCRIPTION =
   '支持直接创作，也可提取小红书笔记分析后再生成创作草稿'
 

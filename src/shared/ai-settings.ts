@@ -2,26 +2,17 @@ import { storageGet, storageSet } from './storage'
 
 export const AI_SETTINGS_STORAGE_KEY = 'redcopy:aiSettings'
 export const DOUBAO_BASE_URL = 'https://ark.cn-beijing.volces.com/api/v3'
+export const DOUBAO_TEXT_MODEL = 'doubao-seed-2-1-pro'
 
 /** AI 配置方案：免费版（豆包）与 Pro 版二选一 */
 export type AiPlan = 'free' | 'pro'
 
-/** 火山方舟豆包大模型（均支持图文理解） */
+/** 火山方舟豆包大模型（固定使用 Doubao-Seed-2.1 Pro） */
 export const DOUBAO_MODEL_OPTIONS = [
   {
-    value: 'doubao-seed-2-0-lite-260428',
-    label: '豆包 Seed 2.0 Lite',
-    description: '默认推荐，速度与效果均衡',
-  },
-  {
-    value: 'doubao-seed-2-0-mini-260428',
-    label: '豆包 Seed 2.0 Mini',
-    description: '更轻量，响应更快',
-  },
-  {
-    value: 'doubao-seed-2-0-pro-260215',
-    label: '豆包 Seed 2.0 Pro',
-    description: '能力更强，适合复杂分析',
+    value: DOUBAO_TEXT_MODEL,
+    label: 'Doubao-Seed-2.1 Pro',
+    description: '固定使用 Doubao-Seed-2.1 Pro，不再使用豆包 2.0 系列模型',
   },
 ] as const
 
@@ -31,8 +22,8 @@ export type DoubaoModel = (typeof DOUBAO_MODEL_OPTIONS)[number]['value']
 export const DOUBAO_CAPABILITY_SUMMARY = {
   title: '免费版 · 豆包（火山方舟）',
   supports: ['文本分析', '配图识别', '生成创作草稿', 'AI 配图生成'],
-  modelHint: '可选模型：Lite（默认）/ Mini / Pro',
-  note: '分析与生成功能均使用同一 ARK API Key，在任务详情页切换模型。',
+  modelHint: '固定模型',
+  note: '分析与生成功能均使用同一 ARK API Key，固定调用 Doubao-Seed-2.1 Pro。',
 } as const
 
 export interface AiSettings {
@@ -60,7 +51,7 @@ interface LegacyNestedSettings {
 export const DEFAULT_AI_SETTINGS: AiSettings = {
   plan: 'free',
   apiKey: '',
-  model: 'doubao-seed-2-0-lite-260428',
+  model: DOUBAO_TEXT_MODEL,
   proApiKey: '',
 }
 

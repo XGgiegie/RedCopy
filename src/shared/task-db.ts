@@ -3,6 +3,7 @@ import type {
   GeneratedImageRecord,
   GeneratedNoteDraft,
 } from './ai-types'
+import type { CreationPurposeKey } from './creation-intent'
 import { loadLastAnalysis } from './analysis-storage'
 import { loadLastDraft } from './draft-storage'
 import { loadLastExtract } from './extract-storage'
@@ -42,6 +43,7 @@ export interface Task {
   analyzedAt: number | null
   draft: GeneratedNoteDraft | null
   generatedAt: number | null
+  generatePurpose: CreationPurposeKey | null
   generateTopic: string
   /** AI 配图生成历史（生成即落库，持久保留） */
   imageHistory: GeneratedImageRecord[]
@@ -51,6 +53,7 @@ export interface Task {
 export type NewTaskInput = Pick<Task, 'noteId' | 'url' | 'note' | 'noteType'> & {
   source?: TaskSource
   creationMode?: CreationMode
+  generatePurpose?: CreationPurposeKey | null
   generateTopic?: string
 }
 
@@ -62,6 +65,7 @@ export type TaskPatch = Partial<
     | 'analyzedAt'
     | 'draft'
     | 'generatedAt'
+    | 'generatePurpose'
     | 'generateTopic'
     | 'imageHistory'
     | 'note'
@@ -79,6 +83,7 @@ function normalizeTask(task: Task): Task {
     ...task,
     source: task.source ?? 'manual',
     creationMode: task.creationMode ?? 'note_analysis',
+    generatePurpose: task.generatePurpose ?? null,
     imageHistory: Array.isArray(task.imageHistory) ? task.imageHistory : [],
   }
 }
@@ -108,6 +113,7 @@ async function buildTaskFromLegacyCaches(): Promise<Task[]> {
     analyzedAt: analysis?.analyzedAt ?? null,
     draft: draft?.draft ?? null,
     generatedAt: draft?.generatedAt ?? null,
+    generatePurpose: null,
     generateTopic: '',
     imageHistory: [],
   }
@@ -167,7 +173,8 @@ export async function createTask(input: NewTaskInput): Promise<Task> {
     analyzedAt: null,
     draft: null,
     generatedAt: null,
-    generateTopic: '',
+    generatePurpose: input.generatePurpose ?? null,
+    generateTopic: input.generateTopic ?? '',
     imageHistory: [],
   }
   const next = sortByExtractedAt([task, ...tasks]).slice(0, MAX_TASKS)

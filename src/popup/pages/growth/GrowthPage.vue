@@ -2,7 +2,6 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { NText, useMessage } from 'naive-ui'
-import { MODULE_GROWTH } from '../../../shared/brand'
 import {
   type GrowthRecord,
   clearGrowthRecords,
@@ -71,15 +70,6 @@ watch(
 <template>
   <div class="growth-page">
     <div class="growth-page-sticky">
-      <section class="growth-hero">
-        <div class="growth-hero-head">
-          <span class="growth-hero-icon" aria-hidden="true">🎯</span>
-          <div class="growth-hero-text">
-            <h2 class="growth-hero-title">{{ MODULE_GROWTH }}</h2>
-          </div>
-        </div>
-      </section>
-
       <nav class="growth-subnav" aria-label="自动垂直养号二级导航">
         <button
           type="button"
@@ -139,37 +129,6 @@ watch(
   padding: 10px 12px;
   background: #f7f8fa;
   border-bottom: 1px solid #eef0f4;
-}
-
-.growth-hero {
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #fff7ed 0%, #fff1f0 100%);
-  border: 1px solid #ffd8bf;
-}
-
-.growth-hero-head {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-}
-
-.growth-hero-icon {
-  flex-shrink: 0;
-  font-size: 22px;
-  line-height: 1;
-}
-
-.growth-hero-text {
-  min-width: 0;
-}
-
-.growth-hero-title {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 700;
-  color: #1d2129;
-  letter-spacing: -0.02em;
 }
 
 .growth-page-tip {

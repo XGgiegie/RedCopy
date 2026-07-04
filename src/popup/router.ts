@@ -1,6 +1,9 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import GrowthPage from './pages/growth/GrowthPage.vue'
 import ListPage from './pages/list/ListPage.vue'
+import PromptEditorPage from './pages/prompts/PromptEditorPage.vue'
+import PromptsPage from './pages/prompts/PromptsPage.vue'
+import ApiKeyView from './pages/settings/ApiKeyView.vue'
 import SettingsView from './pages/settings/SettingsView.vue'
 import TaskPage from './pages/task/TaskPage.vue'
 
@@ -39,6 +42,22 @@ export const router = createRouter({
       path: '/settings',
       name: 'settings',
       component: SettingsView,
+    },
+    {
+      path: '/apikey',
+      name: 'apikey',
+      component: ApiKeyView,
+    },
+    {
+      path: '/prompts',
+      name: 'prompts',
+      component: PromptsPage,
+    },
+    {
+      path: '/prompts/:key',
+      name: 'prompt-editor',
+      component: PromptEditorPage,
+      props: true,
     },
     {
       path: '/:pathMatch(.*)*',

@@ -1,8 +1,13 @@
 import type { AiAnalysisResult, GeneratedNoteDraft } from './ai-types'
 import type { AiSettings } from './ai-settings'
+import {
+  getCreationPurposeLabel,
+  type CreationPurposeKey,
+} from './creation-intent'
 import { requestDoubaoResponses } from './doubao-api'
 import { parseGeneratedDraft } from './parse-generated-draft'
 import type { NoteTextInfo } from './note-types'
+import { buildGenerateSystemPrompt, loadPrompts } from './prompts'
 
 export const GENERATE_SYSTEM_PROMPT = `你是资深小红书图文笔记创作者。
 用户会提供一篇参考笔记、可选的分析信息，以及可能要推广/售卖的主题或卖点。
@@ -45,17 +50,20 @@ export interface GenerateNotePayload {
   url: string
   text: NoteTextInfo
   analysis?: AiAnalysisResult | null
+  purpose?: CreationPurposeKey
   /** 用户想推广/售卖的主题或卖点，可为空 */
   topic?: string
 }
 
 export interface DirectGenerateNotePayload {
+  /** 本次创作目的 */
+  purpose: CreationPurposeKey
   /** 用户想创作的主题、产品、场景或卖点 */
   topic: string
 }
 
 export function buildGenerateUserPrompt(payload: GenerateNotePayload): string {
-  const { text, url, noteId, analysis, topic } = payload
+  const { text, url, noteId, purpose, topic, analysis } = payload
   const lines = [
     `参考笔记链接：${url}`,
     `笔记 ID：${noteId ?? '未知'}`,
@@ -68,9 +76,13 @@ export function buildGenerateUserPrompt(payload: GenerateNotePayload): string {
     `原正文：\n${text.desc || text.allText || '（无正文）'}`,
   ]
 
+  if (purpose) {
+    lines.push('', `本次创作主题：${getCreationPurposeLabel(purpose)}`)
+  }
+
   const trimmedTopic = topic?.trim()
   if (trimmedTopic) {
-    lines.push('', `我想推广/售卖的主题或卖点：${trimmedTopic}`)
+    lines.push('', `本次明确主题/卖点：${trimmedTopic}`)
   }
 
   if (analysis) {
@@ -88,9 +100,11 @@ export function buildGenerateUserPrompt(payload: GenerateNotePayload): string {
 
   lines.push(
     '',
-    trimmedTopic
-      ? '请基于以上参考与我的主题/卖点，生成一篇风格类似、围绕该主题种草的小红书图文笔记。'
-      : '请基于以上参考，生成一篇风格类似、可借鉴的小红书图文笔记。',
+    purpose && trimmedTopic
+      ? '请基于以上参考、创作目的与明确主题，生成一篇风格类似但表达全新的小红书图文笔记。'
+      : trimmedTopic
+        ? '请基于以上参考与我的主题/卖点，生成一篇风格类似、围绕该主题种草的小红书图文笔记。'
+        : '请基于以上参考，生成一篇风格类似、可借鉴的小红书图文笔记。',
   )
   return lines.join('\n')
 }
@@ -98,12 +112,14 @@ export function buildGenerateUserPrompt(payload: GenerateNotePayload): string {
 export function buildDirectGenerateUserPrompt(
   payload: DirectGenerateNotePayload,
 ): string {
+  const purposeLabel = getCreationPurposeLabel(payload.purpose)
   const topic = payload.topic.trim()
   const lines = [
     '创作模式：直接创作，不参考具体笔记。',
-    `我想创作/推广/售卖的主题或卖点：${topic || '（未填写）'}`,
+    `本次创作主题：${purposeLabel}`,
+    `本次明确主题/卖点：${topic || '（未填写）'}`,
     '',
-    '请基于这个主题，直接生成一篇可发布的小红书图文笔记。',
+    `请先满足「${purposeLabel}」这个创作目的，再基于主题生成一篇可发布的小红书图文笔记。`,
     '要求内容具体、有生活场景、有真实动作，不要写成泛泛的营销文案。',
     '如果主题信息较少，请合理补足常见使用场景，但不要编造夸张功效、医学承诺或虚假数据。',
   ]
@@ -116,14 +132,17 @@ export async function requestDoubaoGenerate(
   settings?: AiSettings,
 ): Promise<GeneratedNoteDraft> {
   const userPrompt = buildGenerateUserPrompt(payload)
+  const prompts = await loadPrompts()
+  const systemPrompt = buildGenerateSystemPrompt(prompts, payload.purpose)
 
   console.info('[RedCopy] 请求豆包生成创作草稿', {
     noteId: payload.noteId,
     hasAnalysis: Boolean(payload.analysis),
+    purpose: payload.purpose,
   })
 
   const content = await requestDoubaoResponses(
-    GENERATE_SYSTEM_PROMPT,
+    systemPrompt,
     userPrompt,
     { settings, logLabel: '生成创作草稿' },
   )
@@ -144,13 +163,16 @@ export async function requestDoubaoDirectGenerate(
   settings?: AiSettings,
 ): Promise<GeneratedNoteDraft> {
   const userPrompt = buildDirectGenerateUserPrompt(payload)
+  const prompts = await loadPrompts()
+  const systemPrompt = buildGenerateSystemPrompt(prompts, payload.purpose)
 
   console.info('[RedCopy] 请求豆包直接创作', {
+    purpose: payload.purpose,
     topicLength: payload.topic.trim().length,
   })
 
   const content = await requestDoubaoResponses(
-    GENERATE_SYSTEM_PROMPT,
+    systemPrompt,
     userPrompt,
     { settings, logLabel: '直接创作' },
   )

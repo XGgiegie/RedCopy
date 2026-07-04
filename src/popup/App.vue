@@ -18,10 +18,15 @@ const isModuleHome = computed(
   () => route.name === 'creation' || route.name === 'growth',
 )
 const showModuleTabs = computed(() => isModuleHome.value)
-const isSettings = computed(() => route.name === 'settings')
+const isSettings = computed(
+  () => route.name === 'settings' || route.name === 'apikey' || route.name === 'prompts' || route.name === 'prompt-editor',
+)
 
 const headerTitle = computed(() => {
-  if (isSettings.value) return 'API Key 设置'
+  if (route.name === 'settings') return '设置'
+  if (route.name === 'apikey') return 'API Key 设置'
+  if (route.name === 'prompts') return 'AI 提示词'
+  if (route.name === 'prompt-editor') return '编辑提示词'
   if (route.name === 'task') return '创作任务'
   return ''
 })
@@ -81,19 +86,7 @@ onUnmounted(() => {
           <div class="status-tags">
             <NTooltip trigger="hover" placement="bottom">
               <template #trigger>
-                <button
-                  v-if="pageStatus.tagClickable"
-                  type="button"
-                  class="status-tag status-tag--clickable"
-                  :class="`status-tag--${pageStatus.tagLevel}`"
-                  :aria-label="pageStatus.tagTooltip"
-                  @click="handleOpenXhsPage"
-                >
-                  <span class="status-tag-dot" aria-hidden="true" />
-                  {{ pageStatus.tagLabel }}
-                </button>
                 <span
-                  v-else
                   class="status-tag"
                   :class="`status-tag--${pageStatus.tagLevel}`"
                 >
@@ -120,18 +113,34 @@ onUnmounted(() => {
         <span v-else class="header-title">{{ headerTitle }}</span>
       </div>
 
-      <button
-        v-if="!isSettings"
-        type="button"
-        class="gear-btn"
-        title="配置 API Key"
-        aria-label="配置 API Key"
-        @click="openSettings"
-      >
-        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-          <path d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.52-.4-1.08-.73-1.69-.98l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.61.25-1.17.59-1.69.98l-2.39-.96a.488.488 0 0 0-.59.22l-1.92 3.32c-.12.22-.09.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.52.4 1.08.73 1.69.98l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.61-.25 1.17-.59 1.69-.98l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.09-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
-        </svg>
-      </button>
+      <div class="app-header-actions">
+        <button
+          v-if="!isSettings"
+          type="button"
+          class="xhs-jump-btn"
+          title="跳转到小红书页面"
+          aria-label="跳转到小红书页面"
+          @click="handleOpenXhsPage"
+        >
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 14.5h-2v-5h2zm0-7h-2V7.5h2z"/>
+          </svg>
+          <span>跳转到小红书页面</span>
+        </button>
+
+        <button
+          v-if="!isSettings"
+          type="button"
+          class="gear-btn"
+          title="配置 API Key"
+          aria-label="配置 API Key"
+          @click="openSettings"
+        >
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.52-.4-1.08-.73-1.69-.98l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.61.25-1.17.59-1.69.98l-2.39-.96a.488.488 0 0 0-.59.22l-1.92 3.32c-.12.22-.09.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.52.4 1.08.73 1.69.98l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.61-.25 1.17-.59 1.69-.98l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.09-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
+          </svg>
+        </button>
+      </div>
     </header>
 
     <ModuleTabs v-if="showModuleTabs" />
@@ -175,6 +184,14 @@ onUnmounted(() => {
   align-items: center;
   gap: 6px;
   min-width: 0;
+}
+
+.app-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
 .brand-mark {
@@ -297,6 +314,34 @@ onUnmounted(() => {
 .gear-btn:hover {
   color: #ff2442;
   background: #f2f3f5;
+}
+
+.xhs-jump-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border: 1px solid #ff2442;
+  border-radius: 999px;
+  background: #ff2442;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+  white-space: nowrap;
+}
+
+.xhs-jump-btn:hover {
+  background: #e01f39;
+  border-color: #e01f39;
+}
+
+.xhs-jump-btn svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
 }
 
 .back-btn svg {

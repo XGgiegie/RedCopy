@@ -12,12 +12,10 @@ import {
 } from 'naive-ui'
 import { useTaskOperationsStore } from '../../stores/task-operations'
 import {
-  type DoubaoModel,
   isAiConfigured,
   isGenerateConfigured,
   isProPlan,
   loadAiSettings,
-  saveAnalysisModel,
 } from '../../../shared/ai-settings'
 import type {
   GeneratedImageRecord,
@@ -41,6 +39,11 @@ import {
   type AnalyzeGenerateTaskStatus,
   type ImageToDataUrlResponse,
 } from '../../../shared/messages'
+import {
+  getCreationPurposeLabel,
+  type CreationIntentPayload,
+  type CreationPurposeKey,
+} from '../../../shared/creation-intent'
 import type {
   XhsPublishContentInput,
   XhsPublishImageInput,
@@ -55,7 +58,7 @@ import { openPublishPage } from '../../services/publish-to-xhs'
 import AnalyzeBar from './AnalyzeBar.vue'
 import ContentViewTabs from './ContentViewTabs.vue'
 import DraftEditorCard from './DraftEditorCard.vue'
-import GenerateSimilarNoteDialog from './GenerateSimilarNoteDialog.vue'
+import GenerateComposerPanel from './GenerateComposerPanel.vue'
 import NotePreviewCard from './NotePreviewCard.vue'
 
 const route = useRoute()
@@ -72,18 +75,20 @@ const isLoading = ref(true)
 const contentView = ref<ContentView>('note')
 /** 草稿可编辑副本（与 task.draft 解耦，便于自动保存） */
 const draftModel = ref<GeneratedNoteDraft | null>(null)
+const generatePurpose = ref<CreationPurposeKey | null>(null)
 const generateTopic = ref('')
+const generatePurposeLabel = computed(() => getCreationPurposeLabel(generatePurpose.value))
 
 const isAnalyzing = computed(() => taskOps.isAnalyzing(taskId.value))
 const isGenerating = computed(() => taskOps.isGenerating(taskId.value))
 const isGeneratingDraft = computed(() => isAnalyzing.value || isGenerating.value)
 const analyzeGenerateStatus = ref<AnalyzeGenerateTaskStatus | null>(null)
+const composeErrorMessage = ref('')
 const analyzeGenerateHint = computed(() =>
   analyzeGenerateStatus.value?.running
     ? '后台生成中，侧边栏关闭也会继续'
     : '',
 )
-const showGenerateDialog = ref(false)
 const isDownloadingAllImages = ref(false)
 const downloadingImageIndex = ref<number | null>(null)
 const isOpeningPublish = ref(false)
@@ -93,23 +98,15 @@ const publishDialogImageIds = ref<string[]>([])
 
 // ── AI 设置（任务页内联，仅本页消费） ────────────────────────
 
-const analysisModel = ref<DoubaoModel>('doubao-seed-2-0-lite-260428')
 const isProPlanRef = ref(false)
 const isAiConfiguredRef = ref(false)
 const isGenerateReady = ref(false)
 
 async function refreshAiSettings() {
   const settings = await loadAiSettings()
-  analysisModel.value = settings.model
   isProPlanRef.value = isProPlan(settings)
   isAiConfiguredRef.value = isAiConfigured(settings)
   isGenerateReady.value = isGenerateConfigured(settings)
-}
-
-async function setAnalysisModel(model: DoubaoModel) {
-  await saveAnalysisModel(model)
-  await refreshAiSettings()
-  console.info('[RedCopy] 分析模型已切换', { model })
 }
 
 function onStorageChanged(
@@ -373,6 +370,15 @@ const showDraftSection = computed(() => !!draftModel.value && isActiveView('draf
 const showDirectCreationPlaceholder = computed(
   () => isDirectCreation.value && !draftModel.value,
 )
+const composeMode = computed(() =>
+  route.query.compose === 'direct' || route.query.compose === 'imitate'
+    ? String(route.query.compose)
+    : '',
+)
+const isComposePage = computed(() => composeMode.value === 'direct' || composeMode.value === 'imitate')
+const isDirectGeneratePage = computed(
+  () => isDirectCreation.value && composeMode.value === 'direct',
+)
 
 // ── 加载任务 ────────────────────────────────────────────────
 
@@ -388,6 +394,7 @@ async function loadTask(id: string) {
   if (found) {
     const normalizedDraft = found.draft ? normalizeDraft(found.draft) : null
     draftModel.value = normalizedDraft
+    generatePurpose.value = found.generatePurpose ?? null
     generateTopic.value = found.generateTopic ?? ''
     contentView.value = found.draft || found.creationMode === 'direct' ? 'draft' : 'note'
     selectedIndices.value = found.creationMode === 'direct'
@@ -410,6 +417,7 @@ async function loadTask(id: string) {
     console.info('[RedCopy] 进入任务', { id, noteId: found.noteId })
   } else {
     draftModel.value = null
+    generatePurpose.value = null
     console.warn('[RedCopy] 任务不存在', { id })
   }
   isLoading.value = false
@@ -436,9 +444,10 @@ async function syncAnalyzeGenerateTask(showFinishedMessage = false) {
       await loadTask(id)
       const refreshedDraft = task.value?.draft ? normalizeDraft(task.value.draft) : null
       if (status?.error) {
+        composeErrorMessage.value = status.error
         message.error(`生成失败：${status.error}`)
       } else if ((wasRunning || showFinishedMessage) && refreshedDraft) {
-        showGenerateDialog.value = false
+        composeErrorMessage.value = ''
         draftModel.value = refreshedDraft
         contentView.value = 'draft'
         message.success('创作草稿已生成，可直接编辑')
@@ -489,19 +498,41 @@ watch(imageHistory, (records) => {
 
 function openGenerateDialog() {
   const current = task.value
+  composeErrorMessage.value = ''
   if (!current?.note && !isDirectCreation.value) {
+    composeErrorMessage.value = '当前任务没有可用于仿照创作的笔记内容。'
     message.warning('当前任务无笔记内容')
     return
   }
-  showGenerateDialog.value = true
+  void router.push({
+    name: 'task',
+    params: { id: taskId.value },
+    query: { ...route.query, compose: isDirectCreation.value ? 'direct' : 'imitate' },
+  })
 }
 
-async function handleAnalyzeAndGenerate(topicInput?: string) {
+function closeGenerateEntry() {
+  composeErrorMessage.value = ''
+  if (isComposePage.value) {
+    const nextQuery = { ...route.query }
+    delete nextQuery.compose
+    void router.push({
+      name: 'task',
+      params: { id: taskId.value },
+      query: nextQuery,
+    })
+    return
+  }
+}
+
+async function handleAnalyzeAndGenerate(input?: CreationIntentPayload) {
   const current = task.value
   if (!current) return
   const id = current.id
+  composeErrorMessage.value = ''
 
   if (!current.note && !isDirectCreation.value) {
+    composeErrorMessage.value = '当前任务没有参考笔记，无法发起仿照创作。'
     message.warning('当前任务无笔记内容')
     return
   }
@@ -510,11 +541,15 @@ async function handleAnalyzeAndGenerate(topicInput?: string) {
     current.note.images?.length &&
     selectedImageUrls.value.length === 0
   ) {
+    composeErrorMessage.value = '请至少选择一张配图参与生成，否则无法进行图文仿照创作。'
     message.warning('请至少选择一张配图参与生成')
     return
   }
 
-  if (topicInput !== undefined) generateTopic.value = topicInput
+  if (input) {
+    generatePurpose.value = input.purpose
+    generateTopic.value = input.topic
+  }
 
   try {
     const imageUrls =
@@ -525,10 +560,11 @@ async function handleAnalyzeAndGenerate(topicInput?: string) {
     const response = await startAnalyzeGenerateTask({
       taskId: id,
       mode: isDirectCreation.value ? 'direct' : 'note_analysis',
+      purpose: generatePurpose.value ?? undefined,
       topic: generateTopic.value,
       imageUrls,
     })
-    showGenerateDialog.value = false
+    closeGenerateEntry()
     analyzeGenerateStatus.value = response.status ?? null
     taskOps.syncAnalyzeGenerateStatus(id, response.status)
     startAnalyzeGeneratePolling()
@@ -540,6 +576,7 @@ async function handleAnalyzeAndGenerate(topicInput?: string) {
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error)
     console.error('[RedCopy] 启动后台创作失败', { id, detail }, error)
+    composeErrorMessage.value = detail
     message.error(`启动失败：${detail}`)
   }
 }
@@ -560,6 +597,7 @@ async function persistDraft(id: string) {
   try {
     const updated = await updateTask(id, {
       draft: draftModel.value,
+      generatePurpose: generatePurpose.value,
       generateTopic: generateTopic.value,
     })
     if (taskId.value === id && updated) task.value = updated
@@ -832,85 +870,124 @@ onUnmounted(() => {
         :is-generating="isGenerating"
         :is-ai-configured="isAiConfiguredRef"
         :is-generate-ready="isGenerateReady"
-        :model="analysisModel"
         :is-pro-plan="isProPlanRef"
         @generate="openGenerateDialog"
-        @update:model="setAnalysisModel"
         @open-settings="openSettings"
       />
 
-      <NText v-if="analyzeGenerateHint" depth="3" class="background-generate-hint">
-        {{ analyzeGenerateHint }}
-      </NText>
-
-      <ContentViewTabs
-        v-if="canSwitchView"
-        v-model="contentView"
-        :options="contentViewOptions"
-      />
-
-      <div
-        v-if="showDirectCreationPlaceholder"
-        class="direct-placeholder"
-      >
-        <NText strong class="direct-placeholder-title">直接创作</NText>
-        <NText depth="3" class="direct-placeholder-topic">
-          {{ generateTopic || task.note.title || '未填写创作主题' }}
-        </NText>
+      <div v-if="analyzeGenerateStatus?.error && !isComposePage" class="task-generate-error" role="alert">
+        {{ analyzeGenerateStatus.error }}
       </div>
 
-      <NotePreviewCard
-        v-if="showNoteSection && note"
-        :note="note"
-        :note-type="noteType"
-        :images="images"
-        :body-text="noteBodyText"
-        :is-downloading-all="isDownloadingAllImages"
-        :downloading-index="downloadingImageIndex"
-        :enable-image-selection="enableImageSelection"
-        :is-image-selected="isImageSelected"
-        @copy-markdown="handleCopyNoteMarkdown"
-        @copy-body="handleCopyNoteBody"
-        @copy-images="handleCopyNoteImages"
-        @download-all="handleDownloadAllImages"
-        @download-image="handleDownloadImage"
-        @set-image-selected="setImageSelected"
-        @select-all-images="selectAllImages"
-        @clear-image-selection="clearImageSelection"
-      />
+      <template v-if="isComposePage">
+        <div class="imitate-generate-page-wrap">
+          <div class="imitate-generate-summary">
+            <NText strong class="imitate-generate-summary-title">
+              {{ isDirectGeneratePage ? '直接创作' : '参考笔记' }}
+            </NText>
+            <NText depth="3" class="imitate-generate-summary-text">
+              {{ isDirectGeneratePage ? (generateTopic || task.note.title || '先设定本次创作主题') : (task.note.title || '未命名笔记') }}
+            </NText>
+            <NText depth="3" class="imitate-generate-summary-text">
+              <template v-if="isDirectGeneratePage">
+                {{ generatePurposeLabel || '尚未选择笔记主题' }}
+              </template>
+              <template v-else>
+                {{ task.note.author || '未知作者' }} · 已选 {{ selectedImageUrls.length || images.length }} / {{ images.length }} 张配图参与生成
+              </template>
+            </NText>
+            <div v-if="!isDirectGeneratePage && images.length" class="imitate-generate-summary-actions">
+              <NButton size="small" secondary @click="selectAllImages">全选配图</NButton>
+              <NButton size="small" secondary @click="clearImageSelection">清空配图</NButton>
+            </div>
+          </div>
 
-      <DraftEditorCard
-        v-if="showDraftSection && draftModel"
-        v-model:draft="draftModel"
-        :task-id="taskId"
-        :is-pro-plan="isProPlanRef"
-        :is-generate-ready="isGenerateReady"
-        :image-history="imageHistory"
-        :publish-image-ids="publishImageIds"
-        :is-opening-publish="isOpeningPublish"
-        @copy-text="handleCopyDraftText"
-        @copy-markdown="handleCopyDraftMarkdown"
-        @edit="scheduleDraftPersist"
-        @generated="handleImageGenerated"
-        @delete-image="handleDeleteImage"
-        @set-publish-image-selected="setPublishImageSelected"
-        @set-publish-cover="setPublishCover"
-        @move-publish-image="movePublishImage"
-        @set-publish-position="setPublishPosition"
-        @select-all-publish-images="selectAllPublishImages"
-        @clear-publish-images="clearPublishImages"
-        @open-publish-page="handleOpenPublishPage"
-      />
+          <GenerateComposerPanel
+            :mode="isDirectGeneratePage ? 'direct' : 'note_analysis'"
+            :purpose="generatePurpose"
+            :topic="generateTopic"
+            :is-generating="isGeneratingDraft"
+            :has-draft="hasDraft"
+            :error-message="composeErrorMessage"
+            show-cancel
+            cancel-label="返回任务"
+            @update:purpose="generatePurpose = $event"
+            @update:topic="generateTopic = $event"
+            @cancel="closeGenerateEntry"
+            @confirm="handleAnalyzeAndGenerate"
+          />
+        </div>
+      </template>
+
+      <template v-else>
+
+        <NText v-if="analyzeGenerateHint" depth="3" class="background-generate-hint">
+          {{ analyzeGenerateHint }}
+        </NText>
+
+        <ContentViewTabs
+          v-if="canSwitchView"
+          v-model="contentView"
+          :options="contentViewOptions"
+        />
+
+        <div
+          v-if="showDirectCreationPlaceholder"
+          class="direct-placeholder"
+        >
+          <NText strong class="direct-placeholder-title">直接创作</NText>
+          <NText v-if="generatePurposeLabel" depth="3" class="direct-placeholder-topic">
+            创作目的：{{ generatePurposeLabel }}
+          </NText>
+          <NText depth="3" class="direct-placeholder-topic">
+            {{ generateTopic || task.note.title || '未填写创作主题' }}
+          </NText>
+        </div>
+
+        <NotePreviewCard
+          v-if="showNoteSection && note"
+          :note="note"
+          :note-type="noteType"
+          :images="images"
+          :body-text="noteBodyText"
+          :is-downloading-all="isDownloadingAllImages"
+          :downloading-index="downloadingImageIndex"
+          :enable-image-selection="enableImageSelection"
+          :is-image-selected="isImageSelected"
+          @copy-markdown="handleCopyNoteMarkdown"
+          @copy-body="handleCopyNoteBody"
+          @copy-images="handleCopyNoteImages"
+          @download-all="handleDownloadAllImages"
+          @download-image="handleDownloadImage"
+          @set-image-selected="setImageSelected"
+          @select-all-images="selectAllImages"
+          @clear-image-selection="clearImageSelection"
+        />
+
+        <DraftEditorCard
+          v-if="showDraftSection && draftModel"
+          v-model:draft="draftModel"
+          :task-id="taskId"
+          :is-pro-plan="isProPlanRef"
+          :is-generate-ready="isGenerateReady"
+          :image-history="imageHistory"
+          :publish-image-ids="publishImageIds"
+          :is-opening-publish="isOpeningPublish"
+          @copy-text="handleCopyDraftText"
+          @copy-markdown="handleCopyDraftMarkdown"
+          @edit="scheduleDraftPersist"
+          @generated="handleImageGenerated"
+          @delete-image="handleDeleteImage"
+          @set-publish-image-selected="setPublishImageSelected"
+          @set-publish-cover="setPublishCover"
+          @move-publish-image="movePublishImage"
+          @set-publish-position="setPublishPosition"
+          @select-all-publish-images="selectAllPublishImages"
+          @clear-publish-images="clearPublishImages"
+          @open-publish-page="handleOpenPublishPage"
+        />
+      </template>
     </template>
-
-    <GenerateSimilarNoteDialog
-      v-model:show="showGenerateDialog"
-      :initial-topic="generateTopic"
-      :mode="isDirectCreation ? 'direct' : 'note_analysis'"
-      :is-generating="isGeneratingDraft"
-      :has-draft="hasDraft"
-      @confirm="handleAnalyzeAndGenerate"
-    />
 
     <NModal
       v-model:show="showPublishOrderDialog"
@@ -1070,6 +1147,50 @@ onUnmounted(() => {
   font-size: 12px;
   line-height: 1.5;
   color: #ff2442;
+}
+
+.task-generate-error {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #ffccc7;
+  background: #fff1f0;
+  color: #cf1322;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.imitate-generate-page-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.imitate-generate-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid #eef0f4;
+  border-radius: 10px;
+  background: #fffaf8;
+}
+
+.imitate-generate-summary-title {
+  font-size: 13px;
+  color: #1d2129;
+}
+
+.imitate-generate-summary-text {
+  display: block;
+  font-size: 12px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.imitate-generate-summary-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .direct-placeholder {

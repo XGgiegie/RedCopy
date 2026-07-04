@@ -1,5 +1,6 @@
 import type { AiAnalysisResult, GeneratedNoteDraft } from '../../shared/ai-types'
 import { isProPlan, loadAiSettings } from '../../shared/ai-settings'
+import type { CreationPurposeKey } from '../../shared/creation-intent'
 import { requestDoubaoGenerate } from '../../shared/doubao-generate'
 import { requestProGenerate } from '../../shared/pro-generate'
 import type { NoteTextInfo } from '../../shared/note-types'
@@ -10,6 +11,7 @@ export async function generateNoteDraft(payload: {
   url: string
   text: NoteTextInfo
   analysis?: AiAnalysisResult | null
+  purpose?: CreationPurposeKey
   topic?: string
 }): Promise<GeneratedNoteDraft> {
   const settings = await loadAiSettings()

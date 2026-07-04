@@ -3,12 +3,12 @@ import { isProPlan, loadAiSettings } from './ai-settings'
 import type { GeneratedNoteDraft } from './ai-types'
 import {
   buildDirectGenerateUserPrompt,
-  GENERATE_SYSTEM_PROMPT,
   buildGenerateUserPrompt,
   type DirectGenerateNotePayload,
   type GenerateNotePayload,
 } from './doubao-generate'
 import { parseGeneratedDraft } from './parse-generated-draft'
+import { buildGenerateSystemPrompt, loadPrompts } from './prompts'
 import { PRO_TEXT_MODEL, requestProChatCompletion } from './pro-ai-api'
 
 /** Pro 版使用 gemini-3.5-flash 生成创作草稿 */
@@ -22,15 +22,18 @@ export async function requestProGenerate(
   }
 
   const userPrompt = buildGenerateUserPrompt(payload)
+  const prompts = await loadPrompts()
+  const systemPrompt = buildGenerateSystemPrompt(prompts, payload.purpose)
 
   console.info('[RedCopy] 请求 Pro 生成创作草稿', {
     model: PRO_TEXT_MODEL,
     noteId: payload.noteId,
     hasAnalysis: Boolean(payload.analysis),
+    purpose: payload.purpose,
   })
 
   const content = await requestProChatCompletion(
-    GENERATE_SYSTEM_PROMPT,
+    systemPrompt,
     userPrompt,
     {
       settings: resolved,
@@ -60,14 +63,17 @@ export async function requestProDirectGenerate(
   }
 
   const userPrompt = buildDirectGenerateUserPrompt(payload)
+  const prompts = await loadPrompts()
+  const systemPrompt = buildGenerateSystemPrompt(prompts, payload.purpose)
 
   console.info('[RedCopy] 请求 Pro 直接创作', {
     model: PRO_TEXT_MODEL,
+    purpose: payload.purpose,
     topicLength: payload.topic.trim().length,
   })
 
   const content = await requestProChatCompletion(
-    GENERATE_SYSTEM_PROMPT,
+    systemPrompt,
     userPrompt,
     {
       settings: resolved,

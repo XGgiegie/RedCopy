@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { NButton, NInput, NText, NTooltip, useMessage } from 'naive-ui'
+import { NButton, NText, NTooltip, useMessage } from 'naive-ui'
+import { type CreationPurposeKey } from '../../../shared/creation-intent'
 import { type Task, clearAllTasks, createTask, deleteTask, listTasks } from '../../../shared/task-db'
 import { formatAllTasksAsMarkdown } from '../../../shared/export-markdown'
 import { logExtractContentJson } from '../../../shared/extract-log'
@@ -14,6 +15,7 @@ import {
   getAnalyzeGenerateTaskStatuses,
   startAnalyzeGenerateTask,
 } from '../../services/background-tasks'
+import GenerateComposerPanel from '../task/GenerateComposerPanel.vue'
 import TaskListCard from './TaskListCard.vue'
 import AutoCollectDialog from './AutoCollectDialog.vue'
 
@@ -25,7 +27,9 @@ const pageStatus = usePageStatusStore()
 const tasks = ref<Task[]>([])
 const isExtracting = ref(false)
 const isDirectCreating = ref(false)
+const directPurpose = ref<CreationPurposeKey | null>(null)
 const directTopic = ref('')
+const directCreateError = ref('')
 const isExporting = ref(false)
 const showAutoCollect = ref(false)
 const activeSubPage = ref<'direct' | 'imitate'>('direct')
@@ -79,9 +83,17 @@ async function syncAnalyzeGenerateStatuses(refreshWhenFinished = false) {
 // ── 创作入口 ────────────────────────────────────────────────
 
 async function handleDirectCreate() {
+  const purpose = directPurpose.value
   const topic = directTopic.value.trim()
+  directCreateError.value = ''
+  if (!purpose) {
+    directCreateError.value = '请先选择笔记主题。'
+    message.warning('请先选择创作目的')
+    return
+  }
   if (!topic) {
-    message.warning('请先填写创作主题或卖点')
+    directCreateError.value = '请先填写明确主题、卖点、场景或案例。'
+    message.warning('请先填写明确主题或卖点')
     return
   }
 
@@ -89,6 +101,7 @@ async function handleDirectCreate() {
   try {
     const settings = await loadAiSettings()
     if (!isGenerateConfigured(settings)) {
+      directCreateError.value = '缺少可用的 API Key，请先完成配置后再创作。'
       message.warning('请先配置 API Key 后再创作')
       void router.push('/settings')
       return
@@ -101,21 +114,26 @@ async function handleDirectCreate() {
       note: createBlankNote(title),
       noteType: 'normal',
       creationMode: 'direct',
+      generatePurpose: purpose,
       generateTopic: topic,
     })
     const response = await startAnalyzeGenerateTask({
       taskId: task.id,
       mode: 'direct',
+      purpose,
       topic,
     })
     taskOps.syncAnalyzeGenerateStatus(task.id, response.status)
+    directPurpose.value = null
     directTopic.value = ''
+    directCreateError.value = ''
     await refreshTasks()
     message.success('已开始直接创作，任务会在后台继续')
     void router.push({ name: 'task', params: { id: task.id } })
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error)
     console.error('[RedCopy] 直接创作启动失败', detail, error)
+    directCreateError.value = detail
     message.error(`直接创作失败：${detail}`)
   } finally {
     isDirectCreating.value = false
@@ -292,29 +310,17 @@ watch(
       </nav>
 
       <section v-if="activeSubPage === 'direct'" class="creation-module">
-        <div class="module-heading">
-          <NText strong class="module-title">直接创作</NText>
-          <NText depth="3" class="module-subtitle">不分析笔记，直接输入主题生成草稿</NText>
-        </div>
-        <NInput
-          v-model:value="directTopic"
-          type="textarea"
-          placeholder="写下想创作的主题、产品、场景或卖点"
-          :autosize="{ minRows: 3, maxRows: 5 }"
-          :disabled="isDirectCreating"
-          class="direct-topic-input"
+        <GenerateComposerPanel
+          mode="direct"
+          :purpose="directPurpose"
+          :topic="directTopic"
+          :is-generating="isDirectCreating"
+          :has-draft="false"
+          :error-message="directCreateError"
+          @update:purpose="directPurpose = $event"
+          @update:topic="directTopic = $event"
+          @confirm="handleDirectCreate"
         />
-        <NButton
-          type="primary"
-          size="medium"
-          block
-          class="direct-create-btn"
-          :loading="isDirectCreating"
-          :disabled="!directTopic.trim()"
-          @click="handleDirectCreate"
-        >
-          直接创作
-        </NButton>
       </section>
 
       <section v-else class="creation-module">
@@ -479,15 +485,6 @@ watch(
   font-size: 11px;
   line-height: 1.4;
   text-align: right;
-}
-
-.direct-topic-input {
-  width: 100%;
-}
-
-.direct-create-btn {
-  height: 36px;
-  font-weight: 600;
 }
 
 .extract-btn {

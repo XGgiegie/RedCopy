@@ -5,6 +5,7 @@ import type {
   AutoCollectTaskResponse,
   GrowthAcquireTaskResponse,
 } from '../../shared/messages'
+import type { CreationPurposeKey } from '../../shared/creation-intent'
 import {
   GET_ANALYZE_GENERATE_TASK_STATUSES_MESSAGE,
   GET_ANALYZE_GENERATE_TASK_STATUS_MESSAGE,
@@ -96,6 +97,7 @@ export async function getGrowthAcquireTaskStatus(): Promise<GrowthAcquireTaskRes
 export async function startAnalyzeGenerateTask(payload: {
   taskId: string
   mode?: AnalyzeGenerateMode
+  purpose?: CreationPurposeKey
   topic?: string
   imageUrls?: string[]
 }): Promise<AnalyzeGenerateTaskResponse> {

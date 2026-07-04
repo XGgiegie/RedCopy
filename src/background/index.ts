@@ -46,6 +46,7 @@ import { migratePlainStorageToEncrypted } from '../shared/storage'
 import { isProPlan, loadAiSettings } from '../shared/ai-settings'
 import { resolveAnalysisImageDataUrls } from '../shared/analysis-image'
 import { requestNoteAnalysis } from '../shared/analyze-note'
+import type { CreationPurposeKey } from '../shared/creation-intent'
 import {
   requestDoubaoDirectGenerate,
   requestDoubaoGenerate,
@@ -381,10 +382,11 @@ function cloneAnalyzeGenerateStatuses():
 async function runAnalyzeGenerateTask(payload: {
   taskId: string
   mode?: AnalyzeGenerateMode
+  purpose?: CreationPurposeKey
   topic?: string
   imageUrls?: string[]
 }) {
-  const { taskId, topic = '', imageUrls, mode = 'note_analysis' } = payload
+  const { taskId, purpose, topic = '', imageUrls, mode = 'note_analysis' } = payload
   const status = analyzeGenerateTasks.get(taskId)
   if (!status) return
 
@@ -395,18 +397,20 @@ async function runAnalyzeGenerateTask(payload: {
     const settings = await loadAiSettings()
     if (mode === 'direct') {
       const trimmedTopic = topic.trim()
-      if (!trimmedTopic) throw new Error('请先填写创作主题或卖点')
+      if (!purpose) throw new Error('请先选择创作目的')
+      if (!trimmedTopic) throw new Error('请先填写明确主题或卖点')
 
       setAnalyzeGenerateProgress(status, taskId, 'generating', '正在直接创作…', mode)
       const draft = isProPlan(settings)
-        ? await requestProDirectGenerate({ topic: trimmedTopic }, settings)
-        : await requestDoubaoDirectGenerate({ topic: trimmedTopic }, settings)
+        ? await requestProDirectGenerate({ purpose, topic: trimmedTopic }, settings)
+        : await requestDoubaoDirectGenerate({ purpose, topic: trimmedTopic }, settings)
       const normalized = normalizeGeneratedDraft(draft)
       const generatedAt = Date.now()
 
       const generated = await updateTask(taskId, {
         draft: normalized,
         generatedAt,
+        generatePurpose: purpose,
         generateTopic: trimmedTopic,
       })
       if (!generated) throw new Error('任务已不存在')
@@ -454,6 +458,7 @@ async function runAnalyzeGenerateTask(payload: {
             url: analyzed.url,
             text: analyzed.note,
             analysis,
+            purpose,
             topic,
           },
           settings,
@@ -464,6 +469,7 @@ async function runAnalyzeGenerateTask(payload: {
             url: analyzed.url,
             text: analyzed.note,
             analysis,
+            purpose,
             topic,
           },
           settings,
@@ -474,6 +480,7 @@ async function runAnalyzeGenerateTask(payload: {
     const generated = await updateTask(taskId, {
       draft: normalized,
       generatedAt,
+      generatePurpose: purpose ?? null,
       generateTopic: topic,
     })
     if (!generated) throw new Error('任务已不存在')
@@ -502,6 +509,7 @@ async function runAnalyzeGenerateTask(payload: {
 async function startAnalyzeGenerateTask(payload: {
   taskId: string
   mode?: AnalyzeGenerateMode
+  purpose?: CreationPurposeKey
   topic?: string
   imageUrls?: string[]
 }): Promise<AnalyzeGenerateTaskResponse> {

@@ -1,5 +1,6 @@
 import type { AiAnalysisResult } from './ai-types'
 import type { GeneratedNoteDraft } from './ai-types'
+import type { CreationPurposeKey } from './creation-intent'
 import type {
   AutoCollectConfig,
   AutoCollectProgress,
@@ -247,6 +248,7 @@ export interface StartAnalyzeGenerateTaskRequest {
   type: typeof START_ANALYZE_GENERATE_TASK_MESSAGE
   taskId: string
   mode?: AnalyzeGenerateMode
+  purpose?: CreationPurposeKey
   topic?: string
   imageUrls?: string[]
 }

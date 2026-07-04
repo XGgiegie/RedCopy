@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import '../../styles/content-card.css'
-import { NButton, NSpace, NTag, NText } from 'naive-ui'
+import { NButton, NCollapse, NCollapseItem, NSpace, NTag, NText } from 'naive-ui'
 import type { AiAnalysisResult } from '../../../shared/ai-types'
 
 defineProps<{
@@ -33,36 +33,42 @@ defineEmits<{
     </NSpace>
 
     <div class="content-block">
-      <NText depth="3" class="content-label">总结</NText>
-      <NText class="content-text">{{ analysis.summary }}</NText>
-    </div>
+      <NCollapse>
+        <NCollapseItem title="查看 AI 分析结果" name="analysis-detail">
+          <div class="content-block">
+            <NText depth="3" class="content-label">总结</NText>
+            <NText class="content-text">{{ analysis.summary }}</NText>
+          </div>
 
-    <div v-if="analysis.titleAnalysis" class="content-block">
-      <NText depth="3" class="content-label">标题分析</NText>
-      <NText class="content-text">{{ analysis.titleAnalysis }}</NText>
-    </div>
+          <div v-if="analysis.titleAnalysis" class="content-block">
+            <NText depth="3" class="content-label">标题分析</NText>
+            <NText class="content-text">{{ analysis.titleAnalysis }}</NText>
+          </div>
 
-    <div v-if="analysis.contentStructure?.length" class="content-block">
-      <NText depth="3" class="content-label">内容结构</NText>
-      <ul class="content-list">
-        <li v-for="(item, index) in analysis.contentStructure" :key="index">
-          {{ item }}
-        </li>
-      </ul>
-    </div>
+          <div v-if="analysis.contentStructure?.length" class="content-block">
+            <NText depth="3" class="content-label">内容结构</NText>
+            <ul class="content-list">
+              <li v-for="(item, index) in analysis.contentStructure" :key="index">
+                {{ item }}
+              </li>
+            </ul>
+          </div>
 
-    <div v-if="analysis.engagementInsight" class="content-block">
-      <NText depth="3" class="content-label">互动洞察</NText>
-      <NText class="content-text">{{ analysis.engagementInsight }}</NText>
-    </div>
+          <div v-if="analysis.engagementInsight" class="content-block">
+            <NText depth="3" class="content-label">互动洞察</NText>
+            <NText class="content-text">{{ analysis.engagementInsight }}</NText>
+          </div>
 
-    <div v-if="analysis.rewriteSuggestions?.length" class="content-block">
-      <NText depth="3" class="content-label">爆款创作建议</NText>
-      <ul class="content-list">
-        <li v-for="(item, index) in analysis.rewriteSuggestions" :key="index">
-          {{ item }}
-        </li>
-      </ul>
+          <div v-if="analysis.rewriteSuggestions?.length" class="content-block">
+            <NText depth="3" class="content-label">爆款创作建议</NText>
+            <ul class="content-list">
+              <li v-for="(item, index) in analysis.rewriteSuggestions" :key="index">
+                {{ item }}
+              </li>
+            </ul>
+          </div>
+        </NCollapseItem>
+      </NCollapse>
     </div>
   </div>
 </template>
