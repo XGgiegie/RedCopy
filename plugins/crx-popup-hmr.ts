@@ -1,5 +1,14 @@
 import type { Plugin } from 'vite'
 
+/**
+ * RedCopy popup HMR bridge.
+ *
+ * CRXJS 的常规 dev pipeline 会通过 file-writer 生成扩展可访问的模块路径，
+ * 但 popup 经 Service Worker 代理直连 Vite 时，不一定会完整经过这条管线。
+ * 这个插件只在开发服务中启用，用来补齐 Vite HMR 客户端和 createHotContext
+ * 的路径映射，确保 popup 页面在扩展环境里也能稳定热更新。
+ */
+
 const VITE_CLIENT = '/@vite/client'
 const HMR_PORT = '/@crx/client-port'
 const CUSTOM_ELEMENTS = '/@webcomponents/custom-elements'
